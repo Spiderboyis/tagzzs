@@ -25,6 +25,7 @@ import { QuickCaptureModal } from "@/components/modals/QuickCaptureModal";
 import { useContent } from "@/hooks/useContent";
 import { useTags } from "@/hooks/useTags";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
+import { useChat } from "@/contexts/ChatContext";
 
 // Utilities
 import {
@@ -36,6 +37,7 @@ import {
 function DatabasePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { isChatOpen, setChatOpen } = useChat();
 
   // Get filter from URL, default to 'All'
   const currentFilter = searchParams.get("filter") || "All";
@@ -142,7 +144,7 @@ function DatabasePageContent() {
   const [searchMode, setSearchMode] = useState<"DB" | "AI">("DB");
   const [quickCaptureModalOpen, setQuickCaptureModalOpen] = useState(false);
 
-  const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
+  // const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false); // Replaced by global state
 
   const graphRef = useRef<SVGSVGElement>(null);
 
@@ -446,8 +448,8 @@ function DatabasePageContent() {
           searchMode={searchMode}
           onSetSearchMode={setSearchMode}
           onOpenAddModal={() => setQuickCaptureModalOpen(true)}
-          isAiSidebarOpen={isAiSidebarOpen}
-          setAiSidebarOpen={setIsAiSidebarOpen}
+          isAiSidebarOpen={isChatOpen}
+          setAiSidebarOpen={setChatOpen}
           onSearchInput={handleSearchInput}
           searchQuery={searchQuery}
         />
@@ -463,8 +465,8 @@ function DatabasePageContent() {
         currentFilter={currentFilter}
         currentDetailItem={null}
         graphRef={graphRef}
-        isOpen={isAiSidebarOpen}
-        onClose={() => setIsAiSidebarOpen(false)}
+        isOpen={isChatOpen}
+        onClose={() => setChatOpen(false)}
       />
     </div>
   );

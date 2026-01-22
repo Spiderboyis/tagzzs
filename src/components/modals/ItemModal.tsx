@@ -16,7 +16,7 @@ interface ItemModalProps {
 export default function ItemModal({ isOpen, content, tags = [], onClose }: ItemModalProps) {
     if (!isOpen || !content) return null;
 
-    const imageUrl = content.thumbnailUrl || `https://picsum.photos/seed/${content.id}/800/400`;
+    const imageUrl = content.thumbnailUrl || `public/default.jpg`;
 
     // Format read time
     const formatReadTime = (minutes: number): string => {

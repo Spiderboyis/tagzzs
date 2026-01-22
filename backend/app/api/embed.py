@@ -52,9 +52,6 @@ async def embed_and_store_chunks(request: dict):
         ) < MIN_CHUNKING_LENGTH:
             should_chunk = False
             chunks = []
-            print(
-                f"ℹ️ Content too short ({len(extracted_text)} chars) for chunking, storing summary only."
-            )
         else:
             chunker = TextChunker()
             chunks = chunker.chunk_text(extracted_text)
@@ -193,25 +190,17 @@ async def delete_embeddings(request: dict):
             chunks_collection = get_user_collection(user_id, "chunks")
             chunks_collection.delete(ids=chroma_doc_ids)
             deleted_chunk_count = len(chroma_doc_ids)
-            print(
-                f"[EMBED_DELETE] Deleted {deleted_chunk_count} chunk embeddings for content {content_id}"
-            )
-        except Exception as e:
-            print(
-                f"[EMBED_DELETE] Warning: Failed to delete chunk embeddings: {str(e)}"
-            )
+        except Exception:
+            pass
 
-        # Delete summary embedding
+        # Delete summary embedding (format must match storage.py)
         try:
             summaries_collection = get_user_collection(user_id, "summaries")
-            summary_doc_id = f"{user_id}_{content_id}_summary"
+            summary_doc_id = f"user_{user_id}_content_{content_id}_summary"
             summaries_collection.delete(ids=[summary_doc_id])
             deleted_summary_doc_id = summary_doc_id
-            print(f"[EMBED_DELETE] Deleted summary embedding for content {content_id}")
-        except Exception as e:
-            print(
-                f"[EMBED_DELETE] Warning: Failed to delete summary embedding: {str(e)}"
-            )
+        except Exception:
+            pass
 
         processing_time_ms = int((time.time() - start_time) * 1000)
 
@@ -328,7 +317,7 @@ async def update_embeddings_metadata(request: dict):
 
                 # Update summary metadata
                 try:
-                    summary_doc_id = f"{user_id}_{content_id}_summary"
+                    summary_doc_id = f"user_{user_id}_content_{content_id}_summary"
                     result = summaries_collection.get(
                         ids=[summary_doc_id], include=["metadatas"]
                     )

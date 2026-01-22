@@ -67,11 +67,12 @@ function KanbanView({
                                 <CaretRight weight="bold" className={`text-xs arrow-icon ${isCatExpanded ? 'open' : ''}`} />
                             </div>
                         </div>
-                        <div
-                            className={`flex-1 overflow-y-auto p-3 db-scroll transition-all ${isCatExpanded ? '' : 'hidden'}`}
-                            onMouseEnter={() => setIsOverColumn(true)}
-                            onMouseLeave={() => setIsOverColumn(false)}
-                        >
+                        <div className={`dropdown-wrapper ${isCatExpanded ? 'open' : ''}`}>
+                            <div
+                                className="dropdown-content flex-1 overflow-y-auto p-3 db-scroll"
+                                onMouseEnter={() => setIsOverColumn(true)}
+                                onMouseLeave={() => setIsOverColumn(false)}
+                            >
                             {cat.children.map(sub => {
                                 const subId = `${cat.name}-${sub.name}`;
                                 const isSubExpanded = kanbanExpandedSubs.has(subId);
@@ -92,8 +93,8 @@ function KanbanView({
                                             </div>
                                         )}
                                         {/* Show items: always show if no subcategory name, otherwise respect expansion state */}
-                                        {(!hasSubName || isSubExpanded) && (
-                                            <div className={`flex flex-col gap-2 ${hasSubName ? 'pl-4 border-l border-zinc-800/50 ml-1.5' : ''}`}>
+                                        <div className={`dropdown-wrapper ${(!hasSubName || isSubExpanded) ? 'open' : ''}`}>
+                                            <div className={`dropdown-content flex flex-col gap-2 ${hasSubName ? 'pl-4 border-l border-zinc-800/50 ml-1.5' : ''}`}>
                                                 {sub.items.length === 0 ? <div className="text-[10px] text-zinc-700 italic pl-4 py-1">No items</div> :
                                                     sub.items.map((item: any) => (
                                                         <div key={item.id} onClick={(e) => { e.stopPropagation(); onSelectItem(item); }} className="flex items-start gap-3 p-3 rounded-lg bg-[#121212] border border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 cursor-pointer group transition-all mb-2 shadow-sm">
@@ -106,10 +107,11 @@ function KanbanView({
                                                     ))
                                                 }
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
                                 );
                             })}
+                            </div>
                         </div>
                     </div>
                 );

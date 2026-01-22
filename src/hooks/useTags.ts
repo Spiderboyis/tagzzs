@@ -10,6 +10,7 @@ export interface Tag {
   description: string;
   contentCount: number;
   parentId: string | null;
+  userId: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -98,6 +99,7 @@ export function useTags(options: UseTagsOptions = {}): UseTagsReturn {
         description: t.description || '',
         contentCount: t.contentCount || 0,
         parentId: t.parentId || null,
+        userId: user?.id || '',
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
       }));

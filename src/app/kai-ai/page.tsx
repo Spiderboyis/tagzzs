@@ -13,14 +13,20 @@ import ChatView from "./components/ChatView";
 import UploadModal from "./components/UploadModal";
 
 export default function KaiAIPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const { sendMessage, currentChatId } = useChat();
+  const { sendMessage, currentChatId, isChatOpen, setChatOpen } = useChat();
   const [isHistoryOpen, setIsHistoryOpen] = useState(true);
   const [currentMode, setCurrentMode] = useState<"quick" | "smart" | "deep">(
     "deep"
   );
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [showChat, setShowChat] = useState(false);
+  const [showChat, setShowChat] = useState(isChatOpen);
+  
+  // Sync showChat with global state
+  useEffect(() => {
+    setShowChat(isChatOpen);
+  }, [isChatOpen]);
 
   // Auto-close history on smaller screens on mount
   useEffect(() => {
@@ -51,6 +57,7 @@ export default function KaiAIPage() {
   useEffect(() => {
     if (currentChatId) {
       setShowChat(true);
+      setChatOpen(true);
     }
   }, [currentChatId]);
 
@@ -75,6 +82,7 @@ export default function KaiAIPage() {
 
   const transitionToChat = async (initialMessage?: string) => {
     setShowChat(true);
+    setChatOpen(true);
     if (initialMessage) {
       await sendMessage(initialMessage);
     }
@@ -85,7 +93,11 @@ export default function KaiAIPage() {
       {/* History Sidebar */}
       <HistorySidebar
         isHistoryOpen={isHistoryOpen}
-        onNewChat={() => setShowChat(false)}
+        onNewChat={() => {
+          setShowChat(false);
+          setChatOpen(false);
+          router.push('/kai-ai'); // Clear any query params
+        }}
       />
 
       {/* Main Content */}
