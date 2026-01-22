@@ -4,6 +4,7 @@ import { AuthInput } from './AuthInput';
 import { AuthButton } from './AuthButton';
 import { SocialButton } from './SocialButton';
 import { AuthDivider } from './AuthDivider';
+import Link from 'next/link';
 
 interface SignUpSplitProps {
   onSignIn?: () => void;
@@ -210,11 +211,11 @@ export function SignUpSplit({
       <p className="mt-6 text-xs text-white/40 text-center leading-relaxed animate-in fade-in duration-500 delay-400">
         By creating an account, you agree to our{' '}
         <button className="text-purple-400 hover:text-purple-300 transition-colors hover:underline decoration-purple-400/30">
-          Terms of Service
+          <Link href={"https://www.tagzzs.com/terms"}>Terms of Service</Link>
         </button>{' '}
         and{' '}
         <button className="text-purple-400 hover:text-purple-300 transition-colors hover:underline decoration-purple-400/30">
-          Privacy Policy
+          <Link href={'https://www.tagzzs.com/privacy'}>Privacy Policy</Link>
         </button>
       </p>
 
