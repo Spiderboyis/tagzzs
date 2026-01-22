@@ -56,8 +56,7 @@ export default function ContentPage() {
     return {
       id: currentItem.id,
       image:
-        currentItem.thumbnailUrl ||
-        `https://picsum.photos/seed/${currentItem.id}/1200/800`,
+        currentItem.thumbnailUrl || `/default.jpg`,
       category: tags[0]?.tagName || "General",
       subCategory: tags[1]?.tagName || "",
       title: currentItem.title,
