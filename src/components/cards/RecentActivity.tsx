@@ -12,6 +12,10 @@ interface RecentActivityProps {
     onResetFilter: () => void;
     onCardClick: (id: string) => void;
     title?: string;
+    onAddClick?: () => void;
+    selectedDay?: number | null;
+    selectedMonth?: string;
+    selectedYear?: number;
 }
 
 export default function RecentActivity({ 
@@ -21,7 +25,11 @@ export default function RecentActivity({
     loading = false,
     onResetFilter, 
     onCardClick,
-    title = "Recent Activity"
+    title = "Recent Activity",
+    onAddClick,
+    selectedDay,
+    selectedMonth,
+    selectedYear
 }: RecentActivityProps) {
     // Helper to get tags for a content item
     const getTagsForContent = (item: ContentItem): Tag[] => {
@@ -30,12 +38,58 @@ export default function RecentActivity({
             .filter((tag): tag is Tag => tag !== undefined);
     };
 
+    // Get unique tags for selected date
+    const selectedDateTags = (): Tag[] => {
+        if (!selectedDay || !selectedMonth || !selectedYear) return [];
+        
+        const dateStr = new Date(selectedYear, new Date(Date.parse(selectedMonth + " 1, 2000")).getMonth(), selectedDay)
+            .toISOString().split('T')[0];
+        
+        const tagIds = new Set<string>();
+        content.forEach(item => {
+            const itemDate = new Date(item.createdAt).toISOString().split('T')[0];
+            if (itemDate === dateStr && item.tagsId) {
+                item.tagsId.forEach(tagId => tagIds.add(tagId));
+            }
+        });
+        
+        return Array.from(tagIds)
+            .map(id => tagsMap.get(id))
+            .filter((tag): tag is Tag => tag !== undefined);
+    };
+
+    // Format the title
+    const displayTitle = selectedDay && selectedMonth && selectedYear
+        ? `${selectedMonth} ${selectedDay}, ${selectedYear}`
+        : title.toUpperCase();
+
+    const dateTags = selectedDateTags();
+
     return (
         <div className="glass-panel bg-[#050505] p-5 mt-7 flex flex-col flex-1">
             <div className="flex justify-between items-center mb-5">
-                <h3 className="text-sm md:text-base font-bold text-zinc-500 uppercase tracking-widest">
-                    <span className="text-gradient">{title}</span>
-                </h3>
+                <div>
+                    <h3 className="text-sm md:text-base font-bold text-zinc-500 uppercase tracking-widest">
+                        <span className="text-gradient">{displayTitle}</span>
+                    </h3>
+                    {selectedDay && dateTags.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                            {dateTags.map((tag) => (
+                                <span
+                                    key={tag.id}
+                                    style={{
+                                        backgroundColor: `${tag.tagColor}10`,
+                                        borderColor: `${tag.tagColor}33`,
+                                        color: tag.tagColor
+                                    }}
+                                    className="px-2 py-1 border rounded-full text-xs font-medium"
+                                >
+                                    #{tag.tagName}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                </div>
                 <div
                     onClick={onResetFilter}
                     className={`text-xs md:text-sm bg-white/5 px-2.5 py-0.5 rounded-full border border-white/5 cursor-pointer hover:bg-white/10 transition-colors ${filterLabel === 'Filter: All' ? 'text-zinc-500' : 'text-white'
@@ -65,11 +119,14 @@ export default function RecentActivity({
                 ) : content.length === 0 ? (
                     // Empty state
                     <div className="col-span-full h-64 flex flex-col items-center justify-center text-center">
-                        <div className="w-16 h-16 mb-4 rounded-full bg-zinc-800/50 flex items-center justify-center">
-                            <svg className="w-8 h-8 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <button
+                            onClick={onAddClick}
+                            className="w-16 h-16 mb-4 rounded-full bg-zinc-800/50 flex items-center justify-center text-zinc-400 hover:bg-zinc-700/50 hover:text-zinc-300 transition-all cursor-pointer"
+                        >
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                             </svg>
-                        </div>
+                        </button>
                         <p className="text-zinc-500 text-sm mb-1">No content yet</p>
                         <p className="text-zinc-600 text-xs">Add your first item to get started</p>
                     </div>

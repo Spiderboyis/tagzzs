@@ -130,7 +130,7 @@ async def add_content(req: Request):
                 embedding_payload = {
                     "user_id": user_id,
                     "content_id": content_id,
-                    "extracted_text": raw_c or desc or "",
+                    "extracted_text": (raw_c or desc or "") + (f"\n\nUser Notes:\n{validated_data.personalNotes}" if validated_data.personalNotes else ""),
                     "summary": validated_data.summary or desc or "",
                     "tags": validated_data.tagsId or [],
                     "source_url": str(validated_data.link),
@@ -141,7 +141,7 @@ async def add_content(req: Request):
                     embedding_metadata = {
                         "chromaDocIds": emb_data.get("chroma_doc_ids", []),
                         "summaryDocId": emb_data.get("summary_doc_id", ""),
-                        "chunk_count": emb_data.get("chunk_count", 0),
+                        "chunkCount": emb_data.get("chunk_count", 0),
                     }
             except Exception as e:
                 print(f"Embedding failed: {e}")
@@ -226,6 +226,7 @@ async def delete_content(
                 content={"error": "Content ID is required"}, status_code=400
             )
 
+        # 1. Fetch content details (thumbnail) AND embedding metadata before deletion
         content_res = supabase.table("content") \
             .select("thumbnail_url") \
             .eq("contentid", content_id) \
@@ -236,14 +237,46 @@ async def delete_content(
             return JSONResponse(content={"error": "Content not found"}, status_code=404)
 
         thumbnail_url = content_res.data[0].get("thumbnail_url")
+        
+        # 2. Fetch IDs from content_embeddings table
+        emb_res = supabase.table("content_embeddings").select("chroma_doc_ids, summary_doc_id").eq("contentid", content_id).execute()
+        
+        chroma_doc_ids = []
+        summary_doc_id = None
+        if emb_res.data:
+            emb_record = emb_res.data[0]
+            chroma_doc_ids = emb_record.get("chroma_doc_ids") or []
+            summary_doc_id = emb_record.get("summary_doc_id")
 
+        # 3. Delete from ChromaDB
+        if chroma_doc_ids or summary_doc_id:
+            try:
+                from app.connections import get_user_collection
+                
+                if chroma_doc_ids:
+                    try:
+                        chunks_collection = get_user_collection(user_id, "chunks")
+                        chunks_collection.delete(ids=chroma_doc_ids)
+                    except Exception:
+                        pass
+                        
+                if summary_doc_id:
+                    try:
+                        summaries_collection = get_user_collection(user_id, "summaries")
+                        summaries_collection.delete(ids=[summary_doc_id])
+                    except Exception:
+                        pass
+            except Exception as e:
+                print(f"Warning: Failed to delete embeddings from Chroma: {e}")
+
+        # 4. Delete from Supabase (Cascade will handle content_embeddings rows)
         delete_res = supabase.table("content") \
             .delete() \
             .eq("contentid", content_id) \
             .eq("userid", user_id) \
             .execute()
 
-        # If content_id is provided, delete specific content
+        # 5. Delete thumbnail from Storage
         if thumbnail_url:
             try:
                 file_name = thumbnail_url.split("/")[-1]
@@ -302,6 +335,103 @@ async def update_content(
         if "tagsId" in body_dict:
             tag_map = {tag: f"#{random.randint(0, 0xFFFFFF):06x}" for tag in body_dict["tagsId"]}
 
+        # Check for semantic updates that require re-embedding
+        semantic_update = False
+        re_embedding_metadata = None
+        
+        # Fields that affect embeddings
+        if any(k in updates for k in ["title", "description", "link"]) or \
+           "rawContent" in body_dict or "personalNotes" in body_dict:
+            semantic_update = True
+
+        if semantic_update:
+            try:
+                # 1. Fetch current content metadata
+                current_res = supabase.table("content").select("title, description, link, content_type").eq("contentid", content_id).execute()
+                
+                # Fetch raw content from separate table (schema: rawcontent table)
+                raw_res = supabase.table("rawcontent").select("rawcontent").eq("contentid", content_id).execute()
+                
+                # Fetch existing embeddings metadata from the separate table
+                emb_res = supabase.table("content_embeddings").select("chroma_doc_ids, summary_doc_id").eq("contentid", content_id).execute()
+
+                if current_res.data:
+                    current_record = current_res.data[0]
+                    current_raw = raw_res.data[0].get("rawcontent", "") if raw_res.data else ""
+                    
+                    # DELETE OLD EMBEDDINGS
+                    chroma_doc_ids = []
+                    summary_doc_id = None
+                    
+                    if emb_res.data:
+                        emb_record = emb_res.data[0]
+                        chroma_doc_ids = emb_record.get("chroma_doc_ids") or []
+                        summary_doc_id = emb_record.get("summary_doc_id")
+                    
+                    from app.connections import get_user_collection
+                    
+                    if chroma_doc_ids:
+                        try:
+                            chunks_collection = get_user_collection(user_id, "chunks")
+                            chunks_collection.delete(ids=chroma_doc_ids)
+                        except Exception:
+                            pass
+                            
+                    if summary_doc_id:
+                        try:
+                            summaries_collection = get_user_collection(user_id, "summaries")
+                            summaries_collection.delete(ids=[summary_doc_id])
+                        except Exception:
+                            pass
+
+                    # PREPARE NEW EMBEDDING
+                    # Use updated values if present, else fallback to current record
+                    new_title = updates.get("title", current_record.get("title", ""))
+                    new_desc = updates.get("description", current_record.get("description", ""))
+                    new_raw = body_dict.get("rawContent", current_raw)
+                    new_notes = body_dict.get("personalNotes", "") 
+                    
+                    if "personalNotes" not in body_dict:
+                        # Fetch current notes
+                        notes_res = supabase.table("personal_notes").select("note_data").eq("contentid", content_id).execute()
+                        if notes_res.data and notes_res.data[0].get("note_data"):
+                            new_notes = notes_res.data[0]["note_data"].get("text", "")
+                    
+                    new_link = updates.get("link", current_record.get("link", ""))
+                    new_type = updates.get("contentType", current_record.get("content_type", ""))
+                    new_tags = body_dict.get("tagsId", []) 
+                    if "tagsId" not in body_dict:
+                        tags_res = supabase.table("content_tags").select("tagid").eq("contentid", content_id).execute()
+                        if tags_res.data:
+                            new_tags = [t["tagid"] for t in tags_res.data]
+
+                    extracted_text = (new_raw or new_desc or "") + (f"\n\nUser Notes:\n{new_notes}" if new_notes else "")
+                    
+                    if extracted_text.strip():
+                        from app.api.embed import embed_and_store_chunks
+                        
+                        embedding_payload = {
+                            "user_id": user_id,
+                            "content_id": content_id,
+                            "extracted_text": extracted_text,
+                            "summary": new_desc or "",
+                            "tags": new_tags,
+                            "source_url": str(new_link),
+                            "source_type": new_type or "article",
+                        }
+                        
+                        emb_data = await embed_and_store_chunks(embedding_payload)
+                        
+                        if emb_data.get("success"):
+                            re_embedding_metadata = {
+                                "chromaDocIds": emb_data.get("chroma_doc_ids", []),
+                                "summaryDocId": emb_data.get("summary_doc_id", ""),
+                                "chunkCount": emb_data.get("chunk_count", 0)
+                            }
+
+            except Exception:
+                pass
+
         # Execute Supabase RPC
         result = supabase.rpc("update_full_content", {
             "p_contentid": content_id,
@@ -314,6 +444,22 @@ async def update_content(
 
         if hasattr(result, 'error') and result.error:
             raise Exception(result.error.message)
+            
+        # If we had new embedding metadata, update it now
+        if re_embedding_metadata:
+             try:
+                # Update the content_embeddings table
+                from datetime import datetime
+                supabase.table("content_embeddings").upsert({
+                    "contentid": content_id,
+                    "userid": user_id,
+                    "chroma_doc_ids": re_embedding_metadata["chromaDocIds"],
+                    "summary_doc_id": re_embedding_metadata["summaryDocId"],
+                    "chunk_count": re_embedding_metadata["chunkCount"],
+                    "updated_at": datetime.now().isoformat()
+                }).execute()
+             except Exception:
+                 pass
         
         updated_res = supabase.table("content").select(
             "*, notes:personal_notes(note_data), tags:content_tags(tag_details:tags(tagid, tag_name, color_code))"

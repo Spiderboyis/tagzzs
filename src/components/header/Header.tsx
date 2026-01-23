@@ -3,19 +3,22 @@
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import ShinyText from '../ShinyText';
 import { useUserDisplayName } from '@/hooks/use-user-display-name';
+import { Tag } from '@/types';
 
 interface HeaderProps {
     onResetFilter: () => void;
+    topTags?: Tag[];
 }
 
-const filterTags = [
-    { label: '#AI', colorClass: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20' },
-    { label: '#React', colorClass: 'bg-blue-500/10 border-blue-500/20 text-blue-400 hover:bg-blue-500/20' },
-    { label: '#Design', colorClass: 'bg-pink-500/10 border-pink-500/20 text-pink-400 hover:bg-pink-500/20' },
-    { label: '#Startup', colorClass: 'bg-orange-500/10 border-orange-500/20 text-orange-400 hover:bg-orange-500/20' }
-];
+// const filterTags = [
+//     { label: '#AI', colorClass: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20' },
+//     { label: '#React', colorClass: 'bg-blue-500/10 border-blue-500/20 text-blue-400 hover:bg-blue-500/20' },
+//     { label: '#Design', colorClass: 'bg-pink-500/10 border-pink-500/20 text-pink-400 hover:bg-pink-500/20' },
+//     { label: '#Startup', colorClass: 'bg-orange-500/10 border-orange-500/20 text-orange-400 hover:bg-orange-500/20' }
+// ];
 
-export default function Header({ onResetFilter }: HeaderProps) {
+
+export default function Header({ onResetFilter, topTags = [] }: HeaderProps) {
     const displayName = useUserDisplayName();
     return (
         <div className="px-4 md:px-8 lg:px-10 pt-6 md:pt-10 pb-2 mt-4 shrink-0 bg-black">
@@ -37,12 +40,17 @@ export default function Header({ onResetFilter }: HeaderProps) {
                 >
                     All
                 </button>
-                {filterTags.map((tag, index) => (
+                {topTags && topTags.length > 0 && topTags.slice(0,4).map((tag) => (
                     <button
-                        key={index}
-                        className={`px-3 py-1 rounded-full border text-xs md:text-sm font-medium transition-colors ${tag.colorClass}`}
+                        key={tag.id}
+                        style={{
+                            backgroundColor: `${tag.tagColor}10`,
+                            borderColor: `${tag.tagColor}33`,
+                            color: tag.tagColor
+                        }}
+                        className="px-3 py-1 border rounded-full text-xs md:text-sm font-medium transition-opacity hover:opacity-80"
                     >
-                        {tag.label}
+                        #{tag.tagName}
                     </button>
                 ))}
             </div>

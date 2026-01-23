@@ -113,8 +113,8 @@ function LibrarySidebar({
                 </div>
                 <span>{cat.name}</span>
               </button>
-              {isExpanded && (
-                <div className="flex flex-col ml-[5px] border-l border-zinc-800">
+              <div className={`dropdown-wrapper ${isExpanded ? 'open' : ''}`}>
+                <div className="dropdown-content flex flex-col ml-[5px] border-l border-zinc-800">
                   {cat.children.map((sub, idx) => {
                     const subId = sub.tagId || `${cat.name}-${sub.name}-${idx}`;
                     const isSubExpanded = expandedSubs.has(subId);
@@ -169,8 +169,8 @@ function LibrarySidebar({
                           </span>
                         </div>
 
-                        {isSubExpanded && hasItems && (
-                          <div className="flex flex-col ml-4 border-l border-zinc-800/50">
+                        <div className={`dropdown-wrapper ${isSubExpanded && hasItems ? 'open' : ''}`}>
+                          <div className="dropdown-content flex flex-col ml-4 border-l border-zinc-800/50">
                             {sub.items.map((item) => (
                               <button
                                 key={item.id}
@@ -184,12 +184,12 @@ function LibrarySidebar({
                               </button>
                             ))}
                           </div>
-                        )}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
-              )}
+              </div>
             </div>
           );
         })}

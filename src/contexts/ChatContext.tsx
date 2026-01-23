@@ -45,6 +45,10 @@ interface ChatContextType {
   newChat: () => void;
   deleteChat: (chatId: string) => Promise<void>;
   refreshChatList: () => Promise<void>;
+  
+  // UI State
+  isChatOpen: boolean;
+  setChatOpen: (isOpen: boolean) => void;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -65,6 +69,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [chatList, setChatList] = useState<ChatListItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isChatOpen, setChatOpen] = useState(false);
 
   // Refresh chat list from backend
   const refreshChatList = useCallback(async () => {
@@ -255,6 +260,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     chatList,
     isLoading,
     isSending,
+    isChatOpen,
+    setChatOpen,
     sendMessage,
     loadChat,
     newChat,

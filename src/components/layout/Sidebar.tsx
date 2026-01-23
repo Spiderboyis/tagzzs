@@ -60,6 +60,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
+import Image from 'next/image';
+
 // Sample data matching the design with user's content
 const data = {
   user: {
@@ -116,12 +118,27 @@ function TeamSwitcher({
           size="lg"
           className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground hover:bg-transparent cursor-default"
         >
-          <div className="flex items-center justify-start">
-            <img
+          <div className="flex items-center justify-start gap-2">
+            <Image
               src="/logo.png"
               alt="Tagzzs"
+              width="1024"
+              height="1024"
               className="h-7 w-auto object-contain"
             />
+            <AnimatePresence>
+              {(open || isMobile) && (
+                <motion.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: "auto" }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.2, ease: "easeInOut" }}
+                  className="overflow-hidden whitespace-nowrap font-black text-white tracking-wider text-lg"
+                >
+                  TAGZZS
+                </motion.span>
+              )}
+            </AnimatePresence>
           </div>
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -326,14 +343,14 @@ function NavUser({
                   </div>
                 </div>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator />
+{/*              <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem>
                   <Sparkles />
                   Upgrade to Pro
                 </DropdownMenuItem>
               </DropdownMenuGroup>
-              <DropdownMenuSeparator />
+              <DropdownMenuSeparator />*/}
               <DropdownMenuGroup>
                 <DropdownMenuItem asChild>
                   <Link href="/settings">
@@ -341,14 +358,14 @@ function NavUser({
                     <span>Account</span>
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+{/*                <DropdownMenuItem>
                   <CreditCard />
                   Billing
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <Bell />
                   Notifications
-                </DropdownMenuItem>
+                </DropdownMenuItem>*/}
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={signOut} className="cursor-pointer">

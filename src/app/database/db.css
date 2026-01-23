@@ -69,11 +69,32 @@
 
 /* Arrow Rotation */
 .arrow-icon {
-  transition: transform 0.2s ease;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .arrow-icon.open {
   transform: rotate(90deg);
+}
+
+/* Smooth Dropdown Animation with CSS Grid */
+.dropdown-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dropdown-wrapper.open {
+  grid-template-rows: 1fr;
+}
+
+.dropdown-content {
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dropdown-wrapper.open .dropdown-content {
+  opacity: 1;
 }
 
 /* Sidebar Tree Specifics */
@@ -180,4 +201,25 @@
   width: 0 !important;
   padding: 0 !important;
   margin: 0 !important;
+}
+
+/* Text Selection */
+::selection {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+::-moz-selection {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+*::selection {
+  background-color: rgba(255, 255, 255, 0.15) ;
+  color: #ffffff;
+}
+
+*::-moz-selection {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff; 
 }

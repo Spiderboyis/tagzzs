@@ -88,8 +88,8 @@ function LibraryPanel({
                                         if (node) onSelectNode(node);
                                     }}>{cat.name}</span>
                                 </div>
-                                {isCatOpen && (
-                                    <div className="tree-children open">
+                                <div className={`tree-children-wrapper ${isCatOpen ? 'open' : ''}`}>
+                                    <div className="tree-children">
                                         {cat.subs.map((sub, j) => {
                                             const subId = `sub-${i}-${j}`;
                                             const isSubOpen = expandedGroups.has(subId);
@@ -131,8 +131,8 @@ function LibraryPanel({
                                                             if (node) onSelectNode(node);
                                                         }}>{sub.name}</span>
                                                     </div>
-                                                    {isSubOpen && (
-                                                        <div className="tree-children open">
+                                                    <div className={`tree-children-wrapper ${isSubOpen ? 'open' : ''}`}>
+                                                        <div className="tree-children">
                                                             {sub.items.map((item, k) => {
                                                                 const isSelected = selectedNode?.label === item.name;
                                                                 return (
@@ -150,12 +150,12 @@ function LibraryPanel({
                                                                 );
                                                             })}
                                                         </div>
-                                                    )}
+                                                    </div>
                                                 </div>
                                             );
                                         })}
                                     </div>
-                                )}
+                                </div>
                             </div>
                         );
                     })}

@@ -62,6 +62,7 @@ export default function NeuralGraphPage() {
   const detailLayerRef = useRef<HTMLDivElement>(null);
   const floatingRef = useRef<HTMLDivElement>(null);
   const miniGraphRef = useRef<SVGSVGElement>(null);
+  const touchRef = useRef<{ dist: number; x: number; y: number } | null>(null);
 
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const selectedNodeRef = useRef<GraphNode | null>(null);
@@ -78,7 +79,27 @@ export default function NeuralGraphPage() {
     messages: chatMessages,
     sendMessage,
     isSending: isChatLoading,
+    isChatOpen,
+    setChatOpen,
   } = useChat();
+
+  // Sync Right Panel with global Chat State
+  useEffect(() => {
+    if (isChatOpen) {
+      rightPanelRef.current?.classList.add("active");
+      detailLayerRef.current?.classList.add("push-right");
+      containerRef.current?.classList.add("push-right");
+    } else {
+      // Only close if we are not focused on a node? 
+      // Actually, if we are focused, isChatOpen SHOULD be true if the panel is open.
+      // So if isChatOpen is false, we strictly close it.
+      rightPanelRef.current?.classList.remove("active");
+      if (!leftPanelRef.current?.classList.contains("active")) {
+          containerRef.current?.classList.remove("push-right");
+      }
+      // We might need to be careful about not removing other classes if they are needed
+    }
+  }, [isChatOpen]);
 
   // Fetch real data from backend
   const { graphData, loading: graphLoading, isEmpty } = useGraphData();
@@ -177,8 +198,7 @@ export default function NeuralGraphPage() {
     targetRotationRef.current.x = 0;
 
     leftPanelRef.current?.classList.add("active");
-    rightPanelRef.current?.classList.add("active");
-    // floatingRef.current?.classList.add('docked'); // Removed to prefer shifting
+    setChatOpen(true);
     detailLayerRef.current?.classList.add("push-right");
     detailLayerRef.current?.classList.add("push-left");
     containerRef.current?.classList.add("push-right");
@@ -205,11 +225,7 @@ export default function NeuralGraphPage() {
     if (!text.trim()) return;
 
     // Open right panel if not open
-    if (!rightPanelRef.current?.classList.contains("active")) {
-      rightPanelRef.current?.classList.add("active");
-      detailLayerRef.current?.classList.add("push-right"); // Should push right when chat opens panel
-      containerRef.current?.classList.add("push-right");
-    }
+    setChatOpen(true);
 
     if (source === "floating") {
       // Search for node
@@ -255,7 +271,7 @@ export default function NeuralGraphPage() {
     setSelectedNode(null);
     isFocusedRef.current = false;
 
-    rightPanelRef.current?.classList.remove("active");
+    setChatOpen(false); // Update global state
     leftPanelRef.current?.classList.remove("active");
     floatingRef.current?.classList.remove("docked");
     detailLayerRef.current?.classList.remove("active");
@@ -265,7 +281,6 @@ export default function NeuralGraphPage() {
     containerRef.current?.classList.remove("push-right");
     floatingRef.current?.classList.remove("push-left");
     floatingRef.current?.classList.remove("push-right");
-    // floatingRef.current?.classList.remove('docked');
     setShowSummary(false);
   };
 
@@ -698,10 +713,66 @@ export default function NeuralGraphPage() {
       zoomRef.current = Math.max(0.5, Math.min(2.5, zoomRef.current));
     };
 
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        // Multi-touch: Zoom
+        e.preventDefault(); // Prevent browser zoom
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        touchRef.current = { dist, x: 0, y: 0 };
+        isDraggingRef.current = false;
+      } else if (e.touches.length === 1) {
+        // Single touch: Rotate/Drag
+        const t = e.touches[0];
+        lastMouseRef.current = { x: t.clientX, y: t.clientY };
+        
+        // Check for node tap
+        const rect = canvas.getBoundingClientRect();
+        const node = getNodeAt(t.clientX - rect.left, t.clientY - rect.top);
+        if (!node) {
+            isDraggingRef.current = true;
+        }
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && touchRef.current) {
+        // Pinch Zoom
+        e.preventDefault();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        const delta = dist - touchRef.current.dist;
+        zoomRef.current += delta * 0.005; // Adjust sensitivity
+        zoomRef.current = Math.max(0.5, Math.min(2.5, zoomRef.current));
+        
+        touchRef.current.dist = dist;
+      } else if (e.touches.length === 1 && isDraggingRef.current) {
+        // Rotate
+        e.preventDefault(); // Prevent scroll
+        const t = e.touches[0];
+        targetRotationRef.current.y += (t.clientX - lastMouseRef.current.x) * 0.005;
+        targetRotationRef.current.x += (t.clientY - lastMouseRef.current.y) * 0.005;
+        lastMouseRef.current = { x: t.clientX, y: t.clientY };
+      }
+    };
+
+    const handleTouchEnd = () => {
+      touchRef.current = null;
+      isDraggingRef.current = false;
+    };
+
     canvas.addEventListener("mousedown", handleMouseDown);
     canvas.addEventListener("mousemove", handleMouseMove);
     canvas.addEventListener("mouseup", handleMouseUp);
     canvas.addEventListener("wheel", handleWheel, { passive: false });
+    
+    // Add Touch Listeners
+    canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
+    canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
+    canvas.addEventListener("touchend", handleTouchEnd);
 
     loop();
 
@@ -712,6 +783,10 @@ export default function NeuralGraphPage() {
       canvas.removeEventListener("mousemove", handleMouseMove);
       canvas.removeEventListener("mouseup", handleMouseUp);
       canvas.removeEventListener("wheel", handleWheel);
+      
+      canvas.removeEventListener("touchstart", handleTouchStart);
+      canvas.removeEventListener("touchmove", handleTouchMove);
+      canvas.removeEventListener("touchend", handleTouchEnd);
     };
   }, [graphData]);
 

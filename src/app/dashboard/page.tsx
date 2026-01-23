@@ -16,7 +16,7 @@ import RecentActivity from '@/components/cards/RecentActivity';
 // Panels
 import MonthlyBreakdown from '@/components/panels/MonthlyBreakdown';
 import Calendar from '@/components/panels/Calendar';
-import ProductivityChart from '@/components/panels/ProductivityChart';
+// import ProductivityChart from '@/components/panels/ProductivityChart';
 
 // Modals
 import ItemModal from '@/components/modals/ItemModal';
@@ -243,6 +243,46 @@ export default function Dashboard() {
         return filterLabel;
     }, [isSearching, searchQuery, filterLabel]);
 
+    const SelectedContentTags = useMemo(() => {
+        if(!selectedContent) return [];
+        return selectedContent.tagsId.map(id => tagsMap.get(id)).filter((tag): tag is NonNullable<typeof tag> => tag !== undefined);
+    },[selectedContent, tagsMap]);
+
+    const sortedTags = useMemo(() => {
+        if(!tags || !content) return [];
+        const tagsUsage = new Map<string, number>();
+        content.forEach(item => {
+            if(item.tagsId){
+                item.tagsId.forEach(tagId => {
+                    tagsUsage.set(tagId, (tagsUsage.get(tagId) || 0) + 1);
+                });
+            }
+        });
+        return [...tags].sort((a, b) => {
+            const countA = tagsUsage.get(a.id) || 0;
+            const countB = tagsUsage.get(b.id) || 0;
+            return countB - countA;
+        });
+    }, [tags, content]);
+
+    const selectedDateTags = useMemo(() => {
+        if(!selectedDay || !content || !tags) return [];
+
+        const selectedDate = new Date(selectedYear, selectedMonthIdx, selectedDay);
+        const dateStr = selectedDate.toISOString().split('T')[0];
+
+        const tagIds = new Set<string>();
+        content.forEach(item => {
+            const itemDate = new Date(item.createdAt).toISOString().split('T')[0];
+            if(itemDate === dateStr && item.tagsId){
+                item.tagsId.forEach(tagId => tagIds.add(tagId));
+            }
+        });
+
+        return Array.from(tagIds).map(id => tagsMap.get(id)).filter((tag): tag is NonNullable<typeof tag> => tag !== undefined);
+    }, [selectedDay, selectedYear, selectedMonthIdx, content, tags, tagsMap]);
+
+
     return (
         <div className="flex h-dvh w-full selection:bg-[#9F55FF]/30 relative bg-[#0a0a0a] overflow-hidden">
             {/* Modals */}
@@ -273,7 +313,7 @@ export default function Dashboard() {
             <div className="flex-1 flex flex-col overflow-hidden bg-black xl:rounded-l-3xl border border-white/5 border-r-0 xl:my-2 xl:ml-0 shadow-2xl relative">
                 {/* Single Scroll Container */}
                 <div className="flex-1 flex flex-col overflow-y-auto relative z-10 scrollbar-thumb-zinc-700 scrollbar-track-transparent">
-                    <Header onResetFilter={resetFilter} />
+                    <Header onResetFilter={resetFilter} topTags={sortedTags} />
 
                     <div className="flex flex-1 flex-col xl:flex-row relative">
                         {/* Main Column */}
@@ -339,6 +379,10 @@ export default function Dashboard() {
                                         loading={isLoading || searchLoading}
                                         onResetFilter={resetFilter}
                                         onCardClick={handleCardClick}
+                                        onAddClick={() => setQuickCaptureModalOpen(true)}
+                                        selectedDay={selectedDay}
+                                        selectedMonth={selectedDay ? MONTH_NAMES[selectedMonthIdx] : undefined}
+                                        selectedYear={selectedDay ? selectedYear : undefined}
                                     />
                                 )}
 

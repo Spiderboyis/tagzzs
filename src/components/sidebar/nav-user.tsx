@@ -99,10 +99,6 @@ export function NavUser({
                   <BadgeCheck className="w-5 h-5 mr-1.5" />
                   Account
                 </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Bell className="w-5 h-5 mr-1.5" />
-                  Notifications
-                </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem

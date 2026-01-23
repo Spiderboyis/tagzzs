@@ -32,3 +32,11 @@ export interface CalendarState {
   selectedMonthIdx: number;
   selectedDay: number | null;
 }
+
+export interface Tag {
+  id: string;
+  tagName: string;
+  tagColor: string;
+  userId: string;
+  createdAt: string;
+}

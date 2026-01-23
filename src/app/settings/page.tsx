@@ -486,7 +486,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto bg-black h-screen">
+      <div className="flex-1 bg-black min-h-screen">
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 md:py-10 pb-20">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -495,7 +495,7 @@ export default function SettingsPage() {
             <p className="text-sm text-zinc-500">Manage your account and preferences</p>
           </div>
           <button
-            onClick={() => router.back()}
+            onClick={() => router.push('/dashboard')}
             className="p-2 text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
           >
             <X size={20} />
@@ -560,7 +560,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="flex flex-col lg:grid lg:grid-cols-3 gap-6">
           {/* Main Content Column */}
           <div className="lg:col-span-2 space-y-6">
             {/* Account Settings */}
@@ -594,90 +594,36 @@ export default function SettingsPage() {
               </button>
             </SettingsCard>
 
-            {/* Security Settings */}
-            {/* <SettingsCard
-              title="Security Settings"
-              description="Manage your password and authentication"
-            >
-              <SettingField label="Change Password">
-                <div className="mt-1 space-y-3">
-                  <SettingsInput
-                    type="password"
-                    value={currentPassword}
-                    onChange={setCurrentPassword}
-                    placeholder="Current password"
-                  />
-                  <SettingsInput
-                    type="password"
-                    value={newPassword}
-                    onChange={setNewPassword}
-                    placeholder="New password"
-                  />
-                  <SettingsInput
-                    type="password"
-                    value={confirmPassword}
-                    onChange={setConfirmPassword}
-                    placeholder="Confirm new password"
-                  />
-                  <button
-                    onClick={handleChangePassword}
-                    disabled={isSavingPassword}
-                    className="w-full md:w-auto px-6 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-sm font-medium border border-white/10 hover:border-white/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:!transform-none"
-                  >
-                    {isSavingPassword ? 'Updating...' : 'Update Password'}
-                  </button>
+            {/* Promo Code Card - Visible on Mobile here, Hidden on Desktop */}
+            <div className="block lg:hidden">
+              <SettingsCard title="Promo Code">
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a]">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-semibold text-white">Redeem Code</span>
+                      <Ticket size={16} className="text-zinc-400" />
+                    </div>
+                    <p className="text-xs text-zinc-500 mb-3">Enter your promo code to unlock special features or credits.</p>
+                    
+                    <div className="space-y-3">
+                      <SettingsInput
+                        value={promoCode}
+                        onChange={handlePromoCodeChange}
+                        placeholder="ENTER CODE"
+                        className="text-center tracking-wider uppercase"
+                      />
+                      <button 
+                        onClick={handleRedeemCode}
+                        disabled={isRedeeming || !promoCode.trim()}
+                        className="w-full px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-sm font-medium border border-white/10 hover:border-white/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:!transform-none"
+                      >
+                        {isRedeeming ? 'Redeeming...' : 'Redeem Code'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </SettingField>
-            </SettingsCard> */}
-
-            {/* Preferences */}
-            {/* <SettingsCard
-              title="Preferences"
-              description="Customize your experience"
-            >
-              <div>
-                <p className="text-xs font-medium text-white/90 mb-3">Notifications</p>
-                <div className="space-y-0">
-                  <ToggleRow
-                    label="Email Notifications"
-                    description="Receive updates via email"
-                    checked={emailNotifications}
-                    onChange={setEmailNotifications}
-                  />
-                  <ToggleRow
-                    label="Product Updates"
-                    description="Get notified about new features"
-                    checked={productUpdates}
-                    onChange={setProductUpdates}
-                  />
-                </div>
-              </div>
-
-              <SettingField label="AI Behavior">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setAiMode('concise')}
-                    className={`flex-1 px-4 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                      aiMode === 'concise'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-white/5 text-zinc-400 hover:bg-white/10'
-                    }`}
-                  >
-                    Concise Answers
-                  </button>
-                  <button
-                    onClick={() => setAiMode('deep')}
-                    className={`flex-1 px-4 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                      aiMode === 'deep'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-white/5 text-zinc-400 hover:bg-white/10'
-                    }`}
-                  >
-                    Deep Analysis
-                  </button>
-                </div>
-              </SettingField>
-            </SettingsCard> */}
+              </SettingsCard>
+            </div>
 
             {/* Data & Privacy */}
             <SettingsCard
@@ -685,32 +631,6 @@ export default function SettingsPage() {
               description="Manage your data and account"
             >
               <div className="space-y-4">
-                {/* <button
-                  onClick={handleExportData}
-                  className="w-full flex items-center justify-between px-4 py-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all group"
-                >
-                  <div className="flex items-center gap-3">
-                    <Download size={16} className="text-zinc-400 group-hover:text-white transition-colors" />
-                    <div className="text-left">
-                      <p className="text-xs font-medium text-white">Export Your Data</p>
-                      <p className="text-[10px] text-zinc-500">Download all your information</p>
-                    </div>
-                  </div>
-                </button> */}
-  {/* 
-                  <button
-                    onClick={handleClearCache}
-                    className="w-full flex items-center justify-between px-4 py-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Trash2 size={16} className="text-zinc-400 group-hover:text-white transition-colors" />
-                      <div className="text-left">
-                        <p className="text-xs font-medium text-white">Clear Cache</p>
-                        <p className="text-[10px] text-zinc-500">Remove temporary files</p>
-                      </div>
-                    </div>
-                  </button> */}
-
                 <div className="pt-4 border-t border-white/5">
                   <button 
                   onClick={handleDeleteClick}
@@ -728,9 +648,8 @@ export default function SettingsPage() {
             </SettingsCard>
           </div>
 
-          {/* Sidebar Column */}
-          <div className="space-y-6">
-            {/* Promo Code Card */}
+          {/* Sidebar Column - Visible on Desktop only */}
+          <div className="hidden lg:block space-y-6">
             <SettingsCard title="Promo Code">
               <div className="space-y-4">
                 <div className="p-4 rounded-lg bg-[#0a0a0a] border border-[#1a1a1a]">

@@ -2,88 +2,98 @@
 
 /* Canvas */
 #neural-canvas {
-    display: block;
-    width: 100%;
-    height: 100vh;
-    cursor: grab;
-    background: radial-gradient(circle at center, #1e1e24 0%, #000000 120%);
+  display: block;
+  width: 100%;
+  height: 100vh;
+  cursor: grab;
+  background: radial-gradient(circle at center, #1e1e24 0%, #000000 120%);
 }
 
 #neural-canvas:active {
-    cursor: grabbing;
+  cursor: grabbing;
 }
 
 /* --- DETAIL OVERLAY WITH AUTO-SIZING --- */
 #detail-view-layer {
-    transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
-    opacity: 0;
-    pointer-events: none;
-    transform: scale(0.98) translateY(10px);
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 45;
+  transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.98) translateY(10px);
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 45;
 }
 
 #detail-view-layer.active {
-    opacity: 1;
-    pointer-events: auto;
-    transform: scale(1) translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1) translateY(0);
 }
 
 /* Dynamic Sizing Classes applied by JS */
 /* Layout Pushing Logic with Breakpoints */
 #canvas-container {
-    transition: margin 0.5s cubic-bezier(0.19, 1, 0.22, 1), width 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+  transition:
+    margin 0.5s cubic-bezier(0.19, 1, 0.22, 1),
+    width 0.5s cubic-bezier(0.19, 1, 0.22, 1);
 }
 
 @media (min-width: 768px) {
-    #canvas-container.push-left {
-        margin-left: 16rem;
-        width: calc(100% - 16rem);
-    }
-    #detail-view-layer.push-left { left: 16rem; }
-    
-    #floating-controls.push-left {
-        left: calc(50% + 8rem);
-    }
-    
-    /* Ensure combined width calculation works if both active */
-    #canvas-container.push-left.push-right {
-        width: calc(100% - 36rem);
-    }
+  #canvas-container.push-left {
+    margin-left: 16rem;
+    width: calc(100% - 16rem);
+  }
+  #detail-view-layer.push-left {
+    left: 16rem;
+  }
+
+  #floating-controls.push-left {
+    left: calc(50% + 8rem);
+  }
+
+  /* Ensure combined width calculation works if both active */
+  #canvas-container.push-left.push-right {
+    width: calc(100% - 36rem);
+  }
 }
 
 @media (min-width: 1024px) {
-    #canvas-container.push-right {
-        margin-right: 20rem;
-        width: calc(100% - 20rem);
-    }
-    #detail-view-layer.push-right { right: 20rem; }
-    
-    #floating-controls.push-right { left: calc(50% - 10rem); }
-    #floating-controls.push-left.push-right { left: calc(50% - 2rem); }
+  #canvas-container.push-right {
+    margin-right: 20rem;
+    width: calc(100% - 20rem);
+  }
+  #detail-view-layer.push-right {
+    right: 20rem;
+  }
+
+  #floating-controls.push-right {
+    left: calc(50% - 10rem);
+  }
+  #floating-controls.push-left.push-right {
+    left: calc(50% - 2rem);
+  }
 }
 
 @media (max-width: 767px) {
-    /* Left Overlay Mode */
-    #floating-controls.push-left {
-        left: calc(50% + 8rem); /* Shift right to avoid left overlay */
-        max-width: calc(100vw - 290px);
-    }
+  /* Left Overlay Mode */
+  #floating-controls.push-left {
+    left: calc(50% + 8rem); /* Shift right to avoid left overlay */
+    max-width: calc(100vw - 290px);
+  }
 }
 
 @media (max-width: 1023px) {
-    #floating-controls {
-        display: none !important;
-    }
-    .right-panel {
-        display: none !important;
-    }
+  #floating-controls {
+    display: none !important;
+  }
+  .right-panel {
+    display: none !important;
+  }
 
-    /* Right Overlay Mode - keep push-right logic for canvas if needed, or remove since controls hidden? 
+  /* Right Overlay Mode - keep push-right logic for canvas if needed, or remove since controls hidden? 
        Actually canvas resizing logic for Right Sidebar is separate. 
        If Right Sidebar is overlay (<1024), we don't push canvas.
        So only Floating Controls logic matters here.
@@ -92,232 +102,266 @@
 
 /* Sidebars */
 .sidebar-panel {
-    background: rgba(0, 0, 0, 0.95);
-    backdrop-filter: blur(12px);
-    transition: transform 0.5s cubic-bezier(0.19, 1, 0.22, 1);
-    z-index: 50;
+  background: rgba(0, 0, 0, 0.95);
+  backdrop-filter: blur(12px);
+  transition: transform 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+  z-index: 50;
 }
 
 /* Left Explorer Panel */
 .left-panel {
-    transform: translateX(-100%);
-    border-right: 1px solid #27272a;
+  transform: translateX(-100%);
+  border-right: 1px solid #27272a;
 }
 
 .left-panel.active {
-    transform: translateX(0);
+  transform: translateX(0);
 }
 
 /* Right Details Panel */
 .right-panel {
-    transform: translateX(100%);
-    border-left: 1px solid #27272a;
+  transform: translateX(100%);
+  border-left: 1px solid #27272a;
 }
 
 .right-panel.active {
-    transform: translateX(0);
+  transform: translateX(0);
 }
 
 /* --- NESTED TREE STYLES --- */
 .tree-group {
-    margin-bottom: 2px;
+  margin-bottom: 2px;
 }
 
 .tree-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 8px;
-    cursor: pointer;
-    border-radius: 6px;
-    transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
 }
 
 .tree-header:hover {
-    background: #18181b;
-    color: #fff;
+  background: #18181b;
+  color: #fff;
 }
 
 .tree-arrow {
-    width: 16px;
-    height: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #52525b;
-    transition: transform 0.2s;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #52525b;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s;
 }
 
 .tree-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: #a1a1aa;
-    flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: #a1a1aa;
+  flex: 1;
+}
+
+/* Wrapper for CSS Grid animation */
+.tree-children-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tree-children-wrapper.open {
+  grid-template-rows: 1fr;
 }
 
 .tree-children {
-    margin-left: 11px;
-    padding-left: 11px;
-    border-left: 1px solid #27272a;
-    display: none;
+  margin-left: 11px;
+  padding-left: 11px;
+  border-left: 1px solid #27272a;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.tree-children.open {
-    display: block;
+.tree-children-wrapper.open .tree-children {
+  opacity: 1;
 }
 
 /* Level Colors in Tree */
-.lvl-cat>.tree-header .tree-label {
-    color: #A78BFA;
-    font-weight: 600;
+.lvl-cat > .tree-header .tree-label {
+  color: #a78bfa;
+  font-weight: 600;
 }
 
-.lvl-sub>.tree-header .tree-label {
-    color: #60A5FA;
+.lvl-sub > .tree-header .tree-label {
+  color: #60a5fa;
 }
 
 .lvl-item {
-    padding: 4px 8px 4px 12px;
-    font-size: 12px;
-    color: #71717a;
-    cursor: pointer;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.2s;
+  padding: 4px 8px 4px 12px;
+  font-size: 12px;
+  color: #71717a;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
 }
 
 .lvl-item:hover,
 .lvl-item.active-item {
-    color: #22D3EE;
-    background: rgba(34, 211, 238, 0.1);
+  color: #22d3ee;
+  background: rgba(34, 211, 238, 0.1);
 }
 
 .lvl-item::before {
-    content: '';
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: #22D3EE;
-    opacity: 0.5;
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #22d3ee;
+  opacity: 0.5;
 }
 
 /* --- FLOATING / DOCKING SEARCH BAR ANIMATIONS --- */
 #floating-controls {
-    position: absolute;
-    z-index: 60;
-    bottom: 2rem;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 100%;
-    max-width: 42rem;
-    padding: 0 1rem;
-    transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+  position: absolute;
+  z-index: 60;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 42rem;
+  padding: 0 1rem;
+  transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
 }
 
 #floating-controls.docked {
-    bottom: 0;
-    left: 100%;
-    transform: translateX(-100%);
-    width: 20rem;
-    max-width: 20rem;
-    padding: 0 1rem;
-    background: transparent;
-    border-top: none;
-    pointer-events: none; /* Let clicks pass through if needed, but inner elements need pointer-events: auto */
+  bottom: 0;
+  left: 100%;
+  transform: translateX(-100%);
+  width: 20rem;
+  max-width: 20rem;
+  padding: 0 1rem;
+  background: transparent;
+  border-top: none;
+  pointer-events: none; /* Let clicks pass through if needed, but inner elements need pointer-events: auto */
 }
 
 #floating-controls.docked .floating-bar {
-    pointer-events: auto;
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    border-radius: 0;
-    height: 3.5rem;
-    padding-right: 0;
-    margin-bottom: 0;
-    display: flex;
-    align-items: center;
+  pointer-events: auto;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  height: 3.5rem;
+  padding-right: 0;
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
 }
 
 #floating-controls.docked .add-btn {
-    border-radius: 4px;
-    height: 2rem;
-    padding: 0 0.75rem;
-    margin-right: 1rem;
-    font-size: 0.875rem; /* Reset font size if needed, assuming default ~14px/sm */
-    background: #ffffff;
-    color: #000000;
+  border-radius: 4px;
+  height: 2rem;
+  padding: 0 0.75rem;
+  margin-right: 1rem;
+  font-size: 0.875rem; /* Reset font size if needed, assuming default ~14px/sm */
+  background: #ffffff;
+  color: #000000;
 }
 
 .floating-bar {
-    background: rgba(18, 18, 18, 0.6);
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
-    transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+  background: rgba(18, 18, 18, 0.6);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
 }
 
 /* Graph Styles */
 #ai-graph-svg {
-    overflow: visible;
+  overflow: visible;
 }
 
 .center-pulse {
-    animation: pulse-node 3s infinite;
+  animation: pulse-node 3s infinite;
 }
 
 @keyframes pulse-node {
-    0% {
-        stroke-width: 2px;
-        stroke-opacity: 0.3;
-        stroke: #ffffff;
-    }
+  0% {
+    stroke-width: 2px;
+    stroke-opacity: 0.3;
+    stroke: #ffffff;
+  }
 
-    50% {
-        stroke-width: 6px;
-        stroke-opacity: 0.1;
-        stroke: #ffffff;
-    }
+  50% {
+    stroke-width: 6px;
+    stroke-opacity: 0.1;
+    stroke: #ffffff;
+  }
 
-    100% {
-        stroke-width: 2px;
-        stroke-opacity: 0.3;
-        stroke: #ffffff;
-    }
+  100% {
+    stroke-width: 2px;
+    stroke-opacity: 0.3;
+    stroke: #ffffff;
+  }
 }
 
 .fade-in {
-    animation: fadeIn 0.4s ease-out forwards;
+  animation: fadeIn 0.4s ease-out forwards;
 }
 
 @keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(5px);
-    }
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
 
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar {
-    width: 6px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-track {
-    background: transparent;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #27272a;
-    border-radius: 3px;
+  background: #27272a;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #3f3f46;
+  background: #3f3f46;
+}
+
+/* Text Selection */
+::selection {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+::-moz-selection {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+*::selection {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+*::-moz-selection {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
 }

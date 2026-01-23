@@ -179,3 +179,24 @@
   font-weight: var(--font-weight-normal);
   line-height: 1.5;
 }
+
+/* Text Selection */
+.auth-theme ::selection {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.auth-theme ::-moz-selection {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.auth-theme.dark ::selection {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.auth-theme.dark ::-moz-selection {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
