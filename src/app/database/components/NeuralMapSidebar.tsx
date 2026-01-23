@@ -4,6 +4,8 @@ import React, { useEffect, useRef } from "react";
 import { Sparkle } from "@phosphor-icons/react";
 import { useChat } from "@/contexts/ChatContext";
 import { CreditBalanceDisplay } from "@/components/CreditBalanceDisplay";
+import StaticParticleOrb from "@/components/ui/StaticParticleOrb";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 interface NeuralMapSidebarProps {
   currentFilter: string;
@@ -22,6 +24,7 @@ export default function NeuralMapSidebar({
 }: NeuralMapSidebarProps) {
   const nanobotRef = useRef<HTMLCanvasElement>(null);
   const { messages, sendMessage, isSending } = useChat();
+  const { userProfile } = useUserProfile();
   const [inputValue, setInputValue] = React.useState("");
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
@@ -146,8 +149,8 @@ export default function NeuralMapSidebar({
         >
           {/* Welcome Message */}
           <div className="my-10 flex gap-3 fade-in">
-            <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center flex-shrink-0 text-xs text-white border border-zinc-800">
-              K
+            <div className="w-8 h-8 rounded-full bg-zinc-800/50 flex items-center justify-center flex-shrink-0 overflow-hidden">
+              <StaticParticleOrb size={32} />
             </div>
             <div className="bg-zinc-900 p-3 rounded-2xl rounded-tl-none text-xs text-zinc-400 leading-relaxed shadow-sm">
               Neural interface active. I'm tracking your navigation context.
@@ -162,15 +165,19 @@ export default function NeuralMapSidebar({
                 msg.role === "user" ? "flex-row-reverse" : ""
               }`}
             >
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs text-white border ${
-                  msg.role === "user"
-                    ? "bg-indigo-600 border-indigo-500"
-                    : "bg-zinc-900 border-zinc-800"
-                }`}
-              >
-                {msg.role === "user" ? "U" : "K"}
-              </div>
+              {msg.role === "user" ? (
+                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 border bg-indigo-600 border-indigo-500 overflow-hidden">
+                  {userProfile?.avatar ? (
+                    <img src={userProfile.avatar} alt="You" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-xs text-white">U</span>
+                  )}
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-zinc-800/50 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  <StaticParticleOrb size={32} />
+                </div>
+              )}
               <div
                 className={`p-3 rounded-2xl text-xs leading-relaxed shadow-sm max-w-[80%] ${
                   msg.role === "user"
@@ -186,8 +193,8 @@ export default function NeuralMapSidebar({
           {/* Loading Indicator */}
           {isSending && (
             <div className="flex gap-3 fade-in">
-              <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center flex-shrink-0 text-xs text-white border border-zinc-800">
-                K
+              <div className="w-8 h-8 rounded-full bg-zinc-800/50 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                <StaticParticleOrb size={32} />
               </div>
               <div className="bg-zinc-900 p-3 rounded-2xl rounded-tl-none text-xs text-zinc-500 leading-relaxed shadow-sm flex items-center gap-1">
                 <span

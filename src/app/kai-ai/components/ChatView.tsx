@@ -3,6 +3,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { ArrowUp, Spinner, CaretDown, CaretUp } from "@phosphor-icons/react";
 import { useChat } from "@/contexts/ChatContext";
+import StaticParticleOrb from "@/components/ui/StaticParticleOrb";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 interface ChatViewProps {
   currentMode: "quick" | "smart" | "deep";
@@ -10,6 +12,7 @@ interface ChatViewProps {
 
 export default function ChatView({ currentMode }: ChatViewProps) {
   const { messages, sendMessage, isSending } = useChat();
+  const { userProfile } = useUserProfile();
   const [input, setInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -71,8 +74,8 @@ export default function ChatView({ currentMode }: ChatViewProps) {
         {/* Intro Message if empty */}
         {messages.length === 0 && (
           <div className="flex gap-4 mb-6">
-            <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs text-zinc-400 shrink-0">
-              K
+            <div className="w-8 h-8 rounded-full bg-zinc-800/50 flex items-center justify-center shrink-0 overflow-hidden">
+              <StaticParticleOrb size={32} />
             </div>
             <div className="text-zinc-300 text-sm leading-relaxed max-w-2xl bg-zinc-900/50 p-4 rounded-2xl rounded-tl-none">
               Hello! I'm Kai. I'm ready to help you with{" "}
@@ -95,12 +98,16 @@ export default function ChatView({ currentMode }: ChatViewProps) {
             }`}
           >
             {msg.role === "assistant" ? (
-              <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs text-zinc-400 shrink-0">
-                K
+              <div className="w-8 h-8 rounded-full bg-zinc-800/50 flex items-center justify-center shrink-0 overflow-hidden">
+                <StaticParticleOrb size={32} />
               </div>
             ) : (
-              <div className="w-8 h-8 rounded-full bg-[#A78BFA]/20 flex items-center justify-center text-xs text-[#A78BFA] shrink-0 border border-[#A78BFA]/30">
-                U
+              <div className="w-8 h-8 rounded-full bg-[#A78BFA]/20 flex items-center justify-center shrink-0 border border-[#A78BFA]/30 overflow-hidden">
+                {userProfile?.avatar ? (
+                  <img src={userProfile.avatar} alt="You" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-xs text-[#A78BFA]">U</span>
+                )}
               </div>
             )}
 
@@ -119,8 +126,8 @@ export default function ChatView({ currentMode }: ChatViewProps) {
         {/* Loading Indicator */}
         {isSending && (
           <div className="flex gap-4 mb-6">
-            <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs text-zinc-400 shrink-0">
-              K
+            <div className="w-8 h-8 rounded-full bg-zinc-800/50 flex items-center justify-center shrink-0 overflow-hidden">
+              <StaticParticleOrb size={32} />
             </div>
             <div className="bg-zinc-900 p-4 rounded-2xl rounded-tl-none flex items-center gap-2">
               <div className="flex gap-1">

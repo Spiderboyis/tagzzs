@@ -16,7 +16,7 @@ export default function KaiAIPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { sendMessage, currentChatId, isChatOpen, setChatOpen } = useChat();
-  const [isHistoryOpen, setIsHistoryOpen] = useState(true);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [currentMode, setCurrentMode] = useState<"quick" | "smart" | "deep">(
     "deep"
   );
@@ -27,14 +27,7 @@ export default function KaiAIPage() {
   useEffect(() => {
     setShowChat(isChatOpen);
   }, [isChatOpen]);
-
-  // Auto-close history on smaller screens on mount
-  useEffect(() => {
-    if (window.innerWidth < 1024) {
-      setIsHistoryOpen(false);
-    }
-  }, []);
-
+  
   // Refs for animation state to avoid closure staleness in loop
   const modeRef = useRef<"quick" | "smart" | "deep">("deep");
   const isModeChangeActiveRef = useRef(false);
@@ -58,6 +51,7 @@ export default function KaiAIPage() {
     if (currentChatId) {
       setShowChat(true);
       setChatOpen(true);
+      setIsHistoryOpen(true);
     }
   }, [currentChatId]);
 
@@ -83,6 +77,7 @@ export default function KaiAIPage() {
   const transitionToChat = async (initialMessage?: string) => {
     setShowChat(true);
     setChatOpen(true);
+    setIsHistoryOpen(true);
     if (initialMessage) {
       await sendMessage(initialMessage);
     }
