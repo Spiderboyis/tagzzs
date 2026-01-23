@@ -4,6 +4,7 @@ Chroma Cloud Connection Manager with Multi-Database Support
 Manages connections to Chroma Cloud:
 1. Summaries Database - Stores summarized content embeddings
 2. Chunks Database - Stores chunked content embeddings
+3. Images Database - Stores image embeddings (512-dim) (Shared with Summaries DB)
 
 Each database is isolated for better performance and organization.
 """
@@ -99,7 +100,7 @@ def get_chunks_client() -> ClientAPI:
 
 
 def get_user_collection(
-    user_id: str, collection_type: Literal["summaries", "chunks"] = "chunks"
+    user_id: str, collection_type: Literal["summaries", "chunks", "images"] = "chunks"
 ) -> Collection:
     """
     Get or create a user-specific Chroma collection.
@@ -107,10 +108,11 @@ def get_user_collection(
     Multi-database implementation: Each user gets collections in two databases
     - Summaries DB: user_{user_id}_summaries (summarized content)
     - Chunks DB: user_{user_id}_chunks (chunked content for RAG)
+    - Images DB: user_{user_id}_images (image embeddings) - stored in Summaries DB
 
     Args:
         user_id: User identifier
-        collection_type: Type of collection ("summaries" or "chunks")
+        collection_type: Type of collection ("summaries", "chunks", or "images")
 
     Returns:
         Chroma collection instance (created if doesn't exist)
@@ -122,15 +124,15 @@ def get_user_collection(
     if not user_id or not isinstance(user_id, str):
         raise ValueError("user_id must be a non-empty string")
 
-    if collection_type not in ["summaries", "chunks"]:
+    if collection_type not in ["summaries", "chunks", "images"]:
         raise ValueError(
-            f"Invalid collection_type: {collection_type}. Must be 'summaries' or 'chunks'"
+            f"Invalid collection_type: {collection_type}. Must be 'summaries', 'chunks', or 'images'"
         )
 
     try:
         collection_name = f"user_{user_id}_{collection_type}"
 
-        if collection_type == "summaries":
+        if collection_type == "summaries" or collection_type == "images":
             client = get_summaries_client()
         else:
             client = get_chunks_client()
@@ -165,19 +167,24 @@ def delete_user_collections(user_id: str) -> bool:
         True if successful, False otherwise
     """
     try:
-        for collection_type, client_func in [
-            ("summaries", get_summaries_client),
-            ("chunks", get_chunks_client),
-        ]:
-            collection_name = f"user_{user_id}_{collection_type}"
-            try:
-                client = client_func()
-                client.delete_collection(name=collection_name)
+        # Summaries and Images are in Summaries DB
+        summaries_client = get_summaries_client()
+        for col_type in ["summaries", "images"]:
+             collection_name = f"user_{user_id}_{col_type}"
+             try:
+                summaries_client.delete_collection(name=collection_name)
                 logger.info(f"🗑️  Deleted collection: {collection_name}")
-            except Exception as e:
-                logger.warning(
-                    f"Collection not found or error deleting {collection_name}: {str(e)}"
-                )
+             except Exception as e:
+                logger.warning(f"Collection not found or error deleting {collection_name}: {str(e)}")
+
+        # Chunks are in Chunks DB
+        chunks_client = get_chunks_client()
+        collection_name = f"user_{user_id}_chunks"
+        try:
+            chunks_client.delete_collection(name=collection_name)
+            logger.info(f"🗑️  Deleted collection: {collection_name}")
+        except Exception as e:
+            logger.warning(f"Collection not found or error deleting {collection_name}: {str(e)}")
 
         logger.info(f"✅ Cleaned up all collections for user: {user_id}")
         return True
@@ -188,14 +195,14 @@ def delete_user_collections(user_id: str) -> bool:
 
 
 def get_collection_stats(
-    user_id: str, collection_type: Literal["summaries", "chunks"] = "chunks"
+    user_id: str, collection_type: Literal["summaries", "chunks", "images"] = "chunks"
 ) -> dict:
     """
     Get statistics for a user collection.
 
     Args:
         user_id: User identifier
-        collection_type: Type of collection ("summaries" or "chunks")
+        collection_type: Type of collection ("summaries", "chunks", or "images")
 
     Returns:
         Dictionary with collection stats (document count, metadata)
@@ -237,3 +244,4 @@ def reinitialize_clients():
 if __name__ == "__main__":
     get_user_collection("test_user", "summaries")
     get_user_collection("test_user", "chunks")
+    get_user_collection("test_user", "images")

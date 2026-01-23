@@ -24,26 +24,40 @@ class EmbeddingClient:
     - Automatic model download on first use
     """
 
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2", image_model_name: str = "clip-ViT-B-32"):
         """
-        Initialize EmbeddingClient with specified model.
+        Initialize EmbeddingClient with specified models.
 
         Args:
-            model_name: HuggingFace model name (default: all-MiniLM-L6-v2)
+            model_name: HuggingFace model name for text embeddings (default: all-MiniLM-L6-v2)
+            image_model_name: HuggingFace model name for image embeddings (default: clip-ViT-B-32)
 
         Raises:
-            RuntimeError: If model cannot be loaded
+            RuntimeError: If text model cannot be loaded
         """
         self.model_name = model_name
+        self.image_model_name = image_model_name
         self.cache: Dict[str, List[float]] = {}
+        self.image_model = None  # Lazy load
 
         try:
-            logger.info(f"Loading embedding model: {model_name}")
+            logger.info(f"Loading text embedding model: {model_name}")
             self.model = SentenceTransformer(model_name)
-            logger.info("Model loaded successfully. Embedding dimension: 384")
+            logger.info("Text model loaded successfully. Embedding dimension: 384")
         except Exception as e:
-            logger.error(f"Failed to load embedding model: {str(e)}")
-            raise RuntimeError(f"Cannot load embedding model: {str(e)}")
+            logger.error(f"Failed to load text embedding model: {str(e)}")
+            raise RuntimeError(f"Cannot load text embedding model: {str(e)}")
+
+    def _ensure_image_model(self):
+        """Lazy load the image embedding model."""
+        if self.image_model is None:
+            try:
+                logger.info(f"Loading image embedding model: {self.image_model_name}")
+                self.image_model = SentenceTransformer(self.image_model_name)
+                logger.info("Image model loaded successfully.")
+            except Exception as e:
+                logger.error(f"Failed to load image embedding model: {str(e)}")
+                raise RuntimeError(f"Cannot load image embedding model: {str(e)}")
 
     def _get_cache_key(self, text: str) -> str:
         """
@@ -185,6 +199,78 @@ class EmbeddingClient:
         """
         return self.embed_text(query)
 
+    def embed_image(self, image_input) -> List[float]:
+        """
+        Generate embedding for an image using CLIP.
+
+        Args:
+            image_input: PIL Image object, path to image file, or image URL
+
+        Returns:
+            List of floating point values (embedding, usually 512 dim for ViT-B-32)
+        """
+        self._ensure_image_model()
+        from PIL import Image
+        import urllib.request
+        from io import BytesIO
+
+        image = None
+        if isinstance(image_input, str):
+            if image_input.startswith("http://") or image_input.startswith("https://"):
+                try:
+                    # Use urllib to avoid external dependency issues with requests
+                    with urllib.request.urlopen(image_input, timeout=10) as response:
+                        image_data = response.read()
+                        image = Image.open(BytesIO(image_data))
+                except Exception as e:
+                    logger.error(f"Error downloading image from URL: {str(e)}")
+                    raise ValueError(f"Could not download image from URL: {str(e)}")
+            else:
+                try:
+                    image = Image.open(image_input)
+                except Exception as e:
+                    logger.error(f"Error opening image file: {str(e)}")
+                    raise ValueError(f"Could not open image file: {str(e)}")
+        elif isinstance(image_input, Image.Image):
+            image = image_input
+        else:
+            raise ValueError("Input must be a PIL Image, file path, or URL")
+
+        try:
+            embedding = self.image_model.encode(image, convert_to_tensor=False)
+            embedding_list = (
+                embedding.tolist() if hasattr(embedding, "tolist") else list(embedding)
+            )
+            return embedding_list
+        except Exception as e:
+            logger.error(f"Error generating image embedding: {str(e)}")
+            raise
+
+    def embed_text_clip(self, text: str) -> List[float]:
+        """
+        Generate text embedding using the CLIP model.
+        Useful for searching images with text (text-to-image retrieval).
+
+        Args:
+            text: The text to embed
+
+        Returns:
+            List of floating point values (embedding, usually 512 dim)
+        """
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("Text must be a non-empty string")
+
+        self._ensure_image_model()
+        try:
+            embedding = self.image_model.encode(text, convert_to_tensor=False)
+            embedding_list = (
+                embedding.tolist() if hasattr(embedding, "tolist") else list(embedding)
+            )
+            return embedding_list
+        except Exception as e:
+            logger.error(f"Error generating CLIP text embedding: {str(e)}")
+            raise
+
     def clear_cache(self) -> None:
         """Clear the embedding cache."""
         cache_size = len(self.cache)
@@ -220,3 +306,4 @@ class EmbeddingClient:
         except Exception as e:
             logger.error(f"Error setting batch size: {str(e)}")
             raise
+
