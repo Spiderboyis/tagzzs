@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 
 export interface Tag {
   id: string;
@@ -38,9 +39,20 @@ interface UseTagsReturn {
   getTagsByIds: (ids: string[]) => Tag[];
 }
 
-import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
-
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+
+// Global cache for tags
+interface TagsCache {
+  data: Tag[];
+  timestamp: number;
+  userId: string | null;
+}
+
+let globalTagsCache: TagsCache = {
+  data: [],
+  timestamp: 0,
+  userId: null
+};
 
 export function useTags(options: UseTagsOptions = {}): UseTagsReturn {
   const {
@@ -50,12 +62,24 @@ export function useTags(options: UseTagsOptions = {}): UseTagsReturn {
 
   const { user } = useAuth();
   const api = useAuthenticatedApi(); // Use the authenticated API hook
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // Initialize state from global cache if valid for current user
+  const [tags, setTags] = useState<Tag[]>(() => {
+      if (user && globalTagsCache.userId === user.id) {
+          return globalTagsCache.data;
+      }
+      return [];
+  });
+  
+  const [loading, setLoading] = useState(() => {
+      if (user && globalTagsCache.userId === user.id && globalTagsCache.data.length > 0) {
+          return false;
+      }
+      return true;
+  });
+  
   const [error, setError] = useState<string | null>(null);
 
-  // Track last fetch time for stale-while-revalidate
-  const lastFetchTime = useRef<number>(0);
   const isFetching = useRef<boolean>(false);
 
   const fetchTags = useCallback(async () => {
@@ -64,21 +88,33 @@ export function useTags(options: UseTagsOptions = {}): UseTagsReturn {
       setLoading(false);
       return;
     }
+    
+    // If cache belongs to a different user, reset it
+    if (globalTagsCache.userId !== user.id) {
+        globalTagsCache = {
+            data: [],
+            timestamp: 0,
+            userId: user.id
+        };
+    }
 
     // Prevent concurrent fetches
     if (isFetching.current) return;
 
     // Check if data is still fresh (not stale)
     const now = Date.now();
-    if (tags.length > 0 && (now - lastFetchTime.current) < staleTime) {
+    if (globalTagsCache.data.length > 0 && (now - globalTagsCache.timestamp) < staleTime) {
+      if (tags.length === 0) {
+          setTags(globalTagsCache.data);
+      }
       setLoading(false);
       return;
     }
 
     isFetching.current = true;
     
-    // Only show loading spinner on initial load
-    if (tags.length === 0) {
+    // Only show loading spinner on initial load if we don't have cached data
+    if (tags.length === 0 && globalTagsCache.data.length === 0) {
       setLoading(true);
     }
     
@@ -103,14 +139,20 @@ export function useTags(options: UseTagsOptions = {}): UseTagsReturn {
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
       }));
+      
+      // Update Global Cache
+      globalTagsCache.data = items;
+      globalTagsCache.timestamp = Date.now();
+      globalTagsCache.userId = user.id;
+
       setTags(items);
-      lastFetchTime.current = Date.now();
     } catch (err) {
       console.error('[useTags] Fetch error:', err);
       setError(err instanceof Error ? err.message : 'Unknown error occurred');
       // If authentication expired, invalidating tags might be appropriate
       if (err instanceof Error && err.message === 'Authentication expired') {
         setTags([]);
+        globalTagsCache.data = [];
       }
     } finally {
       setLoading(false);
@@ -179,7 +221,7 @@ export function useTags(options: UseTagsOptions = {}): UseTagsReturn {
     const handleFocus = () => {
       // Only revalidate if data is stale
       const now = Date.now();
-      if ((now - lastFetchTime.current) >= staleTime) {
+      if ((now - globalTagsCache.timestamp) >= staleTime) {
         fetchTags();
       }
     };
@@ -189,7 +231,7 @@ export function useTags(options: UseTagsOptions = {}): UseTagsReturn {
   }, [revalidateOnFocus, staleTime, fetchTags]);
 
   const refetch = useCallback(async () => {
-    lastFetchTime.current = 0; // Force refetch by marking as stale
+    globalTagsCache.timestamp = 0; // Force refetch by marking as stale
     await fetchTags();
   }, [fetchTags]);
 

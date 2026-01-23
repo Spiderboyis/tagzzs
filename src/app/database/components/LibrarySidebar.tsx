@@ -83,7 +83,7 @@ function LibrarySidebar({
           <span className="group-hover:text-white">Root</span>
         </button>
       </nav>
-      <div className="flex-1 overflow-y-auto px-0 font-sans text-sm relative db-scroll">
+      <div className="flex-1 overflow-y-auto min-h-0 px-0 font-sans text-sm relative db-scroll">
         {treeData.map((cat) => {
           const isActive = currentFilter === cat.name;
           const isExpanded = sidebarExpandedCats.has(cat.name);
