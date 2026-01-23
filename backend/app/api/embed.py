@@ -139,6 +139,38 @@ async def embed_and_store_chunks(request: dict):
             extracted_text_length=len(extracted_text),
         )
 
+        # Step 5: Generate and Store Image Embedding (if applicable)
+        image_doc_id = None
+        if source_type == "image" and source_url:
+            try:
+                from app.clients.embedding.embedding_client import EmbeddingClient
+                
+                # Use EmbeddingClient for images (CLIP)
+                # Note: This might block lightly if model needs loading, 
+                # but CLIP loading is cached in the client.
+                embed_client = EmbeddingClient()
+                
+                # Generate embedding from URL
+                image_embedding = embed_client.embed_image(source_url)
+                
+                # Store in 'images' collection
+                images_collection = get_user_collection(user_id, "images")
+                images_storage = ChromaCloudStorage(images_collection)
+                image_doc_id = await images_storage.store_image_embedding(
+                    image_url=source_url,
+                    embedding=image_embedding,
+                    content_id=content_id,
+                    user_id=user_id,
+                    tags=tags,
+                    description=extracted_text  # Use extracted text (description) as metadata
+                )
+                
+            except Exception as e:
+                # Log error but don't fail the whole request since summary/text is already stored
+                print(f"[EMBED_IMAGE] Error processing image embedding: {str(e)}")
+                import traceback
+                traceback.print_exc()
+
         processing_time_ms = int((time.time() - start_time) * 1000)
 
         return {
@@ -146,6 +178,7 @@ async def embed_and_store_chunks(request: dict):
             "chunk_count": len(chunks),
             "chroma_doc_ids": doc_ids,
             "summary_doc_id": summary_doc_id,
+            "image_doc_id": image_doc_id,
             "processing_time_ms": processing_time_ms,
             "errors": [],
         }
