@@ -85,20 +85,26 @@ class TagGenerationEngine:
                     f"Truncated text from {len(request.text)} to {len(text_to_analyze)} chars for tag generation"
                 )
 
-            prompt = f"""Analyze the following text and assign relevant tags from the provided list.
-Select the top {request.top_k} most relevant tags.
-For each tag, provide a confidence score between 0 and 1.
+            prompt = f"""Analyze the following text and generate a hierarchical tagging structure.
+1. Identify the single most relevant BROAD Category (Parent Tag).
+2. Identify up to 3 specific sub-topics (Child Tags) that fit under that category.
+3. For each tag, provide a confidence score between 0 and 1.
+4. Ensure tags are from the provided list if possible, but you may generate new relevant ones if needed.
 
-Available tags: {labels_str}
+Available tags (for reference): {labels_str}
 
 Text to analyze:
 {text_to_analyze}
 
-Please respond in JSON format with this structure:
+Please respond in JSON format with this EXACT structure:
 {{
-    "tags": [
-        {{"name": "tag_name", "score": 0.95}},
-        {{"name": "another_tag", "score": 0.87}}
+    "parent_tag": {{
+        "name": "Category_Name",
+        "score": 0.95
+    }},
+    "child_tags": [
+        {{"name": "Specific_Topic_1", "score": 0.90}},
+        {{"name": "Specific_Topic_2", "score": 0.85}}
     ]
 }}
 
@@ -123,12 +129,33 @@ Response:"""
                         if json_start != -1 and json_end > json_start:
                             json_str = response_text[json_start:json_end]
                             parsed = json.loads(json_str)
+                            response.tags = []
+                            
+                            # Process Parent Tag
+                            parent_data = parsed.get("parent_tag")
+                            parent_name = None
+                            if parent_data:
+                                parent_name = parent_data.get("name")
+                                response.tags.append(
+                                    Tag(
+                                        name=parent_name,
+                                        score=float(parent_data.get("score", 0.0)),
+                                        type="parent",
+                                        parent_name=None
+                                    )
+                                )
 
-                            tags_data = parsed.get("tags", [])[: request.top_k]
-                            response.tags = [
-                                Tag(name=tag["name"], score=float(tag["score"]))
-                                for tag in tags_data
-                            ]
+                            # Process Child Tags (Max 3)
+                            children_data = parsed.get("child_tags", [])[:3]
+                            for child in children_data:
+                                response.tags.append(
+                                    Tag(
+                                        name=child.get("name"),
+                                        score=float(child.get("score", 0.0)),
+                                        type="child",
+                                        parent_name=parent_name
+                                    )
+                                )
                     except (
                         json.JSONDecodeError,
                         KeyError,

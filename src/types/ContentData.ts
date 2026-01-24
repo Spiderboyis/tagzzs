@@ -7,6 +7,7 @@ export type ContentData = {
     contentType: string;
     contentSource: string;
     personalNotes: string;
+    personalNotesBlocks?: any[];
     readTime: string;
     updatedAt: string;
     thumbnailUrl: string | null | undefined;

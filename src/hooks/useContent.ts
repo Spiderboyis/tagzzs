@@ -14,6 +14,7 @@ export interface ContentItem {
   thumbnailUrl: string | null;
   readTime: number;
   personalNotes: string;
+  personalNotesBlocks?: any[];
   tagsId: string[];
   createdAt: string;
   updatedAt: string;

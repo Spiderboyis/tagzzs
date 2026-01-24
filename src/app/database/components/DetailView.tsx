@@ -25,6 +25,10 @@ import {
   ArrowSquareOut,
 } from "@phosphor-icons/react";
 import { useToast } from "@/hooks/use-toast";
+import dynamic from "next/dynamic"; // Use dynamic import for client-side only editor
+
+const BlockNoteEditor = dynamic(() => import("@/components/notes/BlockNoteEditor"), { ssr: false });
+
 
 interface DetailViewProps {
   currentDetailItem: any;
@@ -37,7 +41,7 @@ interface DetailViewProps {
   onToggleEditing: () => void;
   onToggleSummary: () => void;
   onDelete?: () => void;
-  onSave?: (updates: { personalNotes?: string; description?: string }) => void;
+  onSave?: (updates: { personalNotes?: string; description?: string; personalNotesBlocks?: any[] }) => void;
   onRemoveTag?: (tagId: string) => void;
 }
 
@@ -76,6 +80,7 @@ export default function DetailView({
 
   // Notes state
   const [notesContent, setNotesContent] = useState("");
+  const [notesBlocks, setNotesBlocks] = useState<any[]>([]);
 
   // Notes toggle state
   const [isNotesOpen, setIsNotesOpen] = useState(false);
@@ -120,6 +125,7 @@ export default function DetailView({
       setSummaryContent(getDefaultSummary());
     }
     setNotesContent(currentDetailItem.content || "");
+    setNotesBlocks(currentDetailItem.contentBlocks || []);
   }, [currentDetailItem]);
 
   // Helper to format card preview URL (hide toolbar for PDFs)
@@ -478,7 +484,8 @@ export default function DetailView({
                   }`}
                   onClick={() => {
                     if (isEditing) {
-                      if (onSave) onSave({ personalNotes: notesContent });
+                      // We save blocks now. If onSave supports blocks, use it.
+                      if (onSave) onSave({ personalNotesBlocks: notesBlocks, personalNotes: notesContent });
                     }
                     onToggleEditing();
                   }}
@@ -486,7 +493,7 @@ export default function DetailView({
                   {isEditing ? "Save" : "Edit"}
                 </button>
               </div>
-              {!isEditing && !notesContent ? (
+              {!isEditing && (!notesContent && (!notesBlocks || notesBlocks.length === 0)) ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 gap-2 p-8">
                   <FileText weight="duotone" className="text-4xl opacity-20" />
                   <p className="text-sm">
@@ -494,13 +501,17 @@ export default function DetailView({
                   </p>
                 </div>
               ) : (
-                <textarea
-                  className="p-8 text-base text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed outline-none flex-1 bg-transparent resize-none focus:bg-zinc-900/10 transition-colors placeholder:text-zinc-600"
-                  value={notesContent}
-                  onChange={(e) => setNotesContent(e.target.value)}
-                  readOnly={!isEditing}
-                  placeholder="Start typing your notes here..."
-                />
+                <div className="flex-1 bg-transparent min-h-[300px]">
+                 <BlockNoteEditor
+                    initialContent={notesBlocks && notesBlocks.length > 0 ? notesBlocks : undefined}
+                    initialContentHTML={(!notesBlocks || notesBlocks.length === 0) ? notesContent : undefined}
+                    isEditing={isEditing}
+                    onChange={(blocks, text) => {
+                      setNotesBlocks(blocks);
+                      setNotesContent(text);
+                    }}
+                 />
+                </div>
               )}
             </div>
           )}

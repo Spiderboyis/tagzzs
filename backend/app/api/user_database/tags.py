@@ -28,6 +28,7 @@ class AddTagSchema(BaseModel):
         pattern=r"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$",
     )
     description: Optional[str] = ""
+    parentId: Optional[str] = None
 
     @validator("tagName")
     def name_must_not_be_empty(cls, v):
@@ -47,6 +48,7 @@ class UpdateTagSchema(BaseModel):
     tagName: Optional[str] = Field(None, max_length=50)
     tagColor: Optional[str] = Field(None, pattern=r"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$")
     description: Optional[str] = Field(None, max_length=300)
+    parentId: Optional[str] = None
 
     @validator("tagName")
     def name_must_not_be_empty(cls, v):
@@ -91,6 +93,7 @@ async def add_tag(
             "slug": tag_slug,
             "color_code": tag_payload.colorCode,
             "description": tag_payload.description or "",
+            "parent_id": tag_payload.parentId
         }
 
         tag_result = supabase.table("tags").insert(tag_data).execute()
@@ -110,6 +113,7 @@ async def add_tag(
                     "tagName": new_tag["tag_name"],
                     "tagColor": new_tag["color_code"],
                     "description": new_tag["description"],
+                    "parentId": new_tag.get("parent_id"),
                     "contentCount": 0,
                     "createdAt": new_tag["created_at"],
                     "updatedAt": new_tag["updated_at"],
@@ -192,6 +196,8 @@ async def update_tag(
             update_data["color_code"] = payload.tagColor
         if payload.description is not None:
             update_data["description"] = payload.description
+        if payload.parentId is not None:
+            update_data["parent_id"] = payload.parentId
 
         if not update_data:
             return JSONResponse(

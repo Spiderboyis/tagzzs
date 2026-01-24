@@ -62,6 +62,7 @@ export default function ContentPage() {
       title: currentItem.title,
       desc: currentItem.description || "No description available.",
       content: currentItem.personalNotes || "", // Display personal notes in Notes section
+      contentBlocks: currentItem.personalNotesBlocks, // Pass block data
       tags: tags.map((t: any) => {
         let name = t.tagName;
         // If the tag name looks like a UUID, it might be a mistakenly created tag where the name IS the ID of another tag.
@@ -173,6 +174,7 @@ export default function ContentPage() {
   const handleSave = useCallback(
     async (updates: {
       personalNotes?: string;
+      personalNotesBlocks?: any[];
       description?: string;
       tagsId?: string[];
     }) => {
