@@ -87,9 +87,11 @@ class TagGenerationEngine:
 
             prompt = f"""Analyze the following text and generate a hierarchical tagging structure.
 1. Identify the single most relevant BROAD Category (Parent Tag).
-2. Identify up to 3 specific sub-topics (Child Tags) that fit under that category.
-3. For each tag, provide a confidence score between 0 and 1.
-4. Ensure tags are from the provided list if possible, but you may generate new relevant ones if needed.
+2. Identify a specific Sub-topic (Child 1) that fits under that category.
+3. Identify a more specific Detailed Topic (Child 2) that fits under the Sub-topic.
+4. For each tag, provide a confidence score between 0 and 1.
+5. Ensure tags are from the provided list if possible, but you may generate new relevant ones if needed.
+6. The structure MUST be a linear chain: Parent -> Child 1 -> Child 2.
 
 Available tags (for reference): {labels_str}
 
@@ -98,14 +100,18 @@ Text to analyze:
 
 Please respond in JSON format with this EXACT structure:
 {{
-    "parent_tag": {{
+    "parent": {{
         "name": "Category_Name",
         "score": 0.95
     }},
-    "child_tags": [
-        {{"name": "Specific_Topic_1", "score": 0.90}},
-        {{"name": "Specific_Topic_2", "score": 0.85}}
-    ]
+    "child_1": {{
+        "name": "Sub_Topic_Name",
+        "score": 0.90
+    }},
+    "child_2": {{
+        "name": "Detailed_Topic_Name",
+        "score": 0.85
+    }}
 }}
 
 Response:"""
@@ -132,7 +138,7 @@ Response:"""
                             response.tags = []
                             
                             # Process Parent Tag
-                            parent_data = parsed.get("parent_tag")
+                            parent_data = parsed.get("parent")
                             parent_name = None
                             if parent_data:
                                 parent_name = parent_data.get("name")
@@ -145,15 +151,29 @@ Response:"""
                                     )
                                 )
 
-                            # Process Child Tags (Max 3)
-                            children_data = parsed.get("child_tags", [])[:3]
-                            for child in children_data:
+                            # Process Child 1
+                            child1_data = parsed.get("child_1")
+                            child1_name = None
+                            if child1_data and parent_name:
+                                child1_name = child1_data.get("name")
                                 response.tags.append(
                                     Tag(
-                                        name=child.get("name"),
-                                        score=float(child.get("score", 0.0)),
+                                        name=child1_name,
+                                        score=float(child1_data.get("score", 0.0)),
                                         type="child",
                                         parent_name=parent_name
+                                    )
+                                )
+
+                            # Process Child 2
+                            child2_data = parsed.get("child_2")
+                            if child2_data and child1_name:
+                                response.tags.append(
+                                    Tag(
+                                        name=child2_data.get("name"),
+                                        score=float(child2_data.get("score", 0.0)),
+                                        type="child",
+                                        parent_name=child1_name
                                     )
                                 )
                     except (
