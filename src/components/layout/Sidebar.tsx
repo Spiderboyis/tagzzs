@@ -119,6 +119,7 @@ function TeamSwitcher({
           className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground hover:bg-transparent cursor-default"
         >
           <div className="flex items-center justify-start gap-2">
+            <Link href="/dashboard" className="flex items-center gap-2">
             <Image
               src="/logo.png"
               alt="Tagzzs"
@@ -139,6 +140,7 @@ function TeamSwitcher({
                 </motion.span>
               )}
             </AnimatePresence>
+            </Link>
           </div>
         </SidebarMenuButton>
       </SidebarMenuItem>

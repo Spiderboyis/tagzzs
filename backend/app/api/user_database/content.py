@@ -25,6 +25,7 @@ class AddContentSchema(BaseModel):
     personalNotes: str = ""
     readTime: str = ""
     tagsId: List[str] = []
+    tagsData: Optional[List[Dict[str, Any]]] = None
     thumbnailUrl: Optional[str] = None
     rawContent: str = ""
     summary: Optional[str] = ""
@@ -63,6 +64,7 @@ class UpdateFields(BaseModel):
     link: Optional[str] = None
     contentType: Optional[str] = None
     personalNotes: Optional[str] = None
+    personalNotesBlocks: Optional[List[Any]] = None
     readTime: Optional[str] = None
     tagsId: Optional[List[str]] = None
 
@@ -145,6 +147,78 @@ async def add_content(req: Request):
                     }
             except Exception as e:
                 print(f"Embedding failed: {e}")
+        
+
+        if hasattr(validated_data, 'tagsData') and validated_data.tagsData:
+            try:
+                # We need to process parents first, then children
+                # Simplistic approach: Just try create all.
+                # Actually, if we have {name: "Child", parent: "Parent"}, "Parent" must exist.
+                # So we can do two passes or sort.
+                
+                # Filter out pure strings if mixed (AddContentSchema defines List[Dict] usually but Pydantic might complain if mixed)
+                # Let's assume validation passed and we have list of dicts/any.
+                
+                # Check imports
+                from app.utils.tag_slugs_generator import generate_tag_slug
+                from app.api.user_database.tags import generate_tag_slug as _ # just in case
+                
+                # Separate parents and children
+                parents = []
+                children = []
+                others = []
+                
+                for t in validated_data.tagsData:
+                    if isinstance(t, dict):
+                        if t.get("parent"):
+                            children.append(t)
+                        else:
+                            parents.append(t)
+                    else:
+                        others.append(t)
+                
+                # Process Parents First
+                for p in parents:
+                    p_name = p.get("name")
+                    if p_name:
+                         # Use get_or_create_tag logic which we can call via SQL RPC OR just insert via API logic
+                         # Calling RPC 'get_or_create_tag' is easiest
+                         supabase.rpc("get_or_create_tag", {
+                             "p_tag_name": p_name,
+                             "p_userid": user_id,
+                             "p_color_code": f"#{random.randint(0, 0xFFFFFF):06x}",
+                             "p_parent_id": None
+                         }).execute()
+
+                # Process Children
+                for c in children:
+                    c_name = c.get("name")
+                    p_name = c.get("parent")
+                    
+                    if c_name and p_name:
+                        # Find parent ID
+                        p_slug = generate_tag_slug(p_name)
+                        p_res = supabase.table("tags").select("tagid").eq("userid", user_id).eq("slug", p_slug).execute()
+                        
+                        p_id = None
+                        if p_res.data:
+                            p_id = p_res.data[0]["tagid"]
+                        else:
+                            # Create parent if missing (should have been done above, but maybe it wasn't in parents list explicitly?)
+                            # If 'Parent' was only mentioned in 'parent' field of child but not in list?
+                            # Frontend usually sends all.
+                            pass
+                            
+                        # Create Child
+                        supabase.rpc("get_or_create_tag", {
+                             "p_tag_name": c_name,
+                             "p_userid": user_id,
+                             "p_color_code": f"#{random.randint(0, 0xFFFFFF):06x}",
+                             "p_parent_id": p_id
+                         }).execute()
+
+            except Exception as e:
+                print(f"Tag Hierarchy Sync Error: {e}")
 
 
         try:
@@ -341,7 +415,7 @@ async def update_content(
         
         # Fields that affect embeddings
         if any(k in updates for k in ["title", "description", "link"]) or \
-           "rawContent" in body_dict or "personalNotes" in body_dict:
+           "rawContent" in body_dict or "personalNotes" in body_dict or "personalNotesBlocks" in body_dict:
             semantic_update = True
 
         if semantic_update:
@@ -391,6 +465,12 @@ async def update_content(
                     new_raw = body_dict.get("rawContent", current_raw)
                     new_notes = body_dict.get("personalNotes", "") 
                     
+                    # If dealing with blocks, we might want to convert to text for embedding?
+                    # For now just use provided personalNotes text if available
+                    if "personalNotes" not in body_dict and "personalNotesBlocks" in body_dict:
+                         # Extraction from blocks for embedding is complex, skip for now or use simple text extraction
+                         pass 
+                    
                     if "personalNotes" not in body_dict:
                         # Fetch current notes
                         notes_res = supabase.table("personal_notes").select("note_data").eq("contentid", content_id).execute()
@@ -433,14 +513,35 @@ async def update_content(
                 pass
 
         # Execute Supabase RPC
+        # Execute Supabase RPC
+        # Note: update_full_content only accepts p_note_text (legacy), so we pass None if we are updating blocks
+        # to prevent it from overwriting our block data with simple text.
+        rpc_note_text = body_dict.get("personalNotes")
+        if "personalNotesBlocks" in body_dict:
+            rpc_note_text = None
+            
         result = supabase.rpc("update_full_content", {
             "p_contentid": content_id,
             "p_userid": user_id,
             "p_updates": updates,
             "p_raw_content": body_dict.get("rawContent"), 
-            "p_note_text": body_dict.get("personalNotes"),
+            "p_note_text": rpc_note_text,
             "p_tag_map": tag_map
         }).execute()
+        
+        # Manually update specific note data (blocks) since RPC doesn't support JSONB notes update
+        if "personalNotesBlocks" in body_dict:
+            from datetime import datetime
+            note_payload = {
+                 "blocks": body_dict["personalNotesBlocks"],
+                 "text": body_dict.get("personalNotes", "") 
+            }
+            supabase.table("personal_notes").upsert({
+                 "contentid": content_id,
+                 "userid": user_id,
+                 "note_data": note_payload,
+                 "updated_at": datetime.now().isoformat()
+            }).execute()
 
         if hasattr(result, 'error') and result.error:
             raise Exception(result.error.message)
@@ -551,8 +652,12 @@ async def get_user_content(request: Request, user: dict = Depends(get_current_us
             # Flatten Personal Notes
             notes_list = item.pop("notes", [])
             personal_notes_text = ""
+            personal_notes_blocks = []
+            
             if notes_list and isinstance(notes_list[0].get("note_data"), dict):
-                personal_notes_text = notes_list[0]["note_data"].get("text", "")
+                note_data = notes_list[0]["note_data"]
+                personal_notes_text = note_data.get("text", "")
+                personal_notes_blocks = note_data.get("blocks", [])
 
             # Create the camelCase object matching your Frontend 'ContentItem'
             mapped_item = {
@@ -565,6 +670,7 @@ async def get_user_content(request: Request, user: dict = Depends(get_current_us
                 "thumbnailUrl": item.get("thumbnail_url"),
                 "readTime": item.get("read_time", 0),
                 "personalNotes": personal_notes_text,
+                "personalNotesBlocks": personal_notes_blocks,
                 "tagsId": tags_id_list,
                 "createdAt": item.get("created_at"),
                 "updatedAt": item.get("updated_at")

@@ -13,8 +13,13 @@
     "init-search": "node scripts/init-search.js"
   },
   "dependencies": {
+    "@blocknote/core": "^0.46.1",
+    "@blocknote/mantine": "^0.46.1",
+    "@blocknote/react": "^0.46.1",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@mantine/core": "^8.3.13",
+    "@mantine/hooks": "^8.3.13",
     "@mui/material": "^7.3.4",
     "@opentelemetry/api": "^1.9.0",
     "@phosphor-icons/react": "^2.1.10",

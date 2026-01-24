@@ -9,6 +9,7 @@ export interface ContentItem {
   thumbnailUrl: string | null;
   readTime: number;
   personalNotes: string;
+  personalNotesBlocks?: any[]; // Store block-based notes
   tagsId: string[];
   createdAt: string;
   updatedAt: string;

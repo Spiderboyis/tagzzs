@@ -202,7 +202,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
           setPreviewData({
             title: content.title || metadata.title || "Untitled",
             description: content.summary || content.description || "", // Prefer AI summary for description
-            tags: (content.tags || []).slice(0, 2), // Limit to 2 most relevant tags
+            tags: (content.tags || []).slice(0, 2).map((tag: any) => typeof tag === 'string' ? tag : tag.name).filter(Boolean), // Limit to 2 most relevant tags, extract name from tag objects
             summary: "", // Legacy field removed from UI
             personalNotes: "",
             source: new URL(trimmedUrl).hostname,
@@ -237,7 +237,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
           setPreviewData({
             title: content.title || selectedFile.name || "Untitled",
             description: content.summary || content.description || "", // Prefer AI summary
-            tags: (content.tags || []).slice(0, 2), // Limit to 2 most relevant tags
+            tags: (content.tags || []).slice(0, 2).map((tag: any) => typeof tag === 'string' ? tag : tag.name).filter(Boolean), // Limit to 2 most relevant tags, extract name from tag objects
             summary: "",
             personalNotes: "",
             source: "Document",
@@ -274,10 +274,10 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
           setPreviewData({
             title: "My Idea",
             description: ideaContent,
-            tags: [...(content.tags || []).slice(0, 2), ...ideaTags].slice(
+            tags: [...(content.tags || []).slice(0, 2).map((tag: any) => typeof tag === 'string' ? tag : tag.name).filter(Boolean), ...ideaTags].slice(
               0,
               2
-            ), // Limit refined tags + manually added tags
+            ), // Limit refined tags + manually added tags, extract name from tag objects
             summary: content.summary || "",
             personalNotes: "",
             source: "Ideation",
