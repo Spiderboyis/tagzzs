@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 
 export interface ContentItem {
   id: string;
@@ -36,9 +37,24 @@ interface UseContentReturn {
   loadMore: () => Promise<void>;
 }
 
-import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
-
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+
+// Global cache to persist data across page navigation
+interface ContentCache {
+  data: ContentItem[];
+  timestamp: number;
+  offset: number;
+  hasMore: boolean;
+  userId: string | null;
+}
+
+let globalCache: ContentCache = {
+  data: [],
+  timestamp: 0,
+  offset: 0,
+  hasMore: false,
+  userId: null
+};
 
 export function useContent(options: UseContentOptions = {}): UseContentReturn {
   const {
@@ -49,14 +65,38 @@ export function useContent(options: UseContentOptions = {}): UseContentReturn {
 
   const { user } = useAuth();
   const api = useAuthenticatedApi();
-  const [content, setContent] = useState<ContentItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [offset, setOffset] = useState(0);
+  
+  // Initialize state from global cache if valid for current user
+  const [content, setContent] = useState<ContentItem[]>(() => {
+    if (user && globalCache.userId === user.id) {
+        return globalCache.data;
+    }
+    return [];
+  });
+  
+  const [loading, setLoading] = useState(() => {
+     if (user && globalCache.userId === user.id && globalCache.data.length > 0) {
+         return false;
+     }
+     return true;
+  });
 
-  // Track last fetch time for stale-while-revalidate
-  const lastFetchTime = useRef<number>(0);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [hasMore, setHasMore] = useState(() => {
+      if (user && globalCache.userId === user.id) {
+          return globalCache.hasMore;
+      }
+      return false;
+  });
+  
+  const [offset, setOffset] = useState(() => {
+      if (user && globalCache.userId === user.id) {
+          return globalCache.offset;
+      }
+      return 0;
+  });
+
   const isFetching = useRef<boolean>(false);
 
   const fetchContent = useCallback(async (isLoadMore = false) => {
@@ -66,12 +106,29 @@ export function useContent(options: UseContentOptions = {}): UseContentReturn {
       return;
     }
 
+    // If cache belongs to a different user, reset it
+    if (globalCache.userId !== user.id) {
+        globalCache = {
+            data: [],
+            timestamp: 0,
+            offset: 0,
+            hasMore: false,
+            userId: user.id
+        };
+    }
+
     // Prevent concurrent fetches
     if (isFetching.current) return;
 
     // Check if data is still fresh (not stale)
     const now = Date.now();
-    if (!isLoadMore && content.length > 0 && (now - lastFetchTime.current) < staleTime) {
+    if (!isLoadMore && globalCache.data.length > 0 && (now - globalCache.timestamp) < staleTime) {
+      // Sync local state if needed (though initial state should handle it)
+      if (content.length === 0) {
+          setContent(globalCache.data);
+          setHasMore(globalCache.hasMore);
+          setOffset(globalCache.offset);
+      }
       setLoading(false);
       return;
     }
@@ -79,7 +136,8 @@ export function useContent(options: UseContentOptions = {}): UseContentReturn {
     isFetching.current = true;
     
     // Only show loading spinner on initial load, not on background revalidation
-    if (content.length === 0 || isLoadMore) {
+    // But if we have cached data, don't show loading unless it is explicitly loadMore
+    if ((globalCache.data.length === 0 || isLoadMore) && content.length === 0) {
       setLoading(true);
     }
     
@@ -101,20 +159,36 @@ export function useContent(options: UseContentOptions = {}): UseContentReturn {
       const items: ContentItem[] = data.data || [];
       
       if (isLoadMore) {
-        setContent(prev => [...prev, ...items]);
-        setOffset(currentOffset + items.length);
+        // Update Global Cache
+        globalCache.data = [...globalCache.data, ...items];
+        globalCache.offset = currentOffset + items.length;
+        
+        // Update Local State
+        setContent(globalCache.data);
+        setOffset(globalCache.offset);
       } else {
+        // Update Global Cache
+        globalCache.data = items;
+        globalCache.offset = items.length;
+        
+        // Update Local State
         setContent(items);
         setOffset(items.length);
       }
 
-      setHasMore(data.pagination?.hasMore || false);
-      lastFetchTime.current = Date.now();
+      const newHasMore = data.pagination?.hasMore || false;
+      globalCache.hasMore = newHasMore;
+      globalCache.timestamp = Date.now();
+      globalCache.userId = user.id;
+
+      setHasMore(newHasMore);
+
     } catch (err) {
       console.error('[useContent] Fetch error:', err);
       setError(err instanceof Error ? err.message : 'Unknown error occurred');
       if (err instanceof Error && err.message === 'Authentication expired') {
         setContent([]);
+        globalCache.data = [];
       }
     } finally {
       setLoading(false);
@@ -134,7 +208,7 @@ export function useContent(options: UseContentOptions = {}): UseContentReturn {
     const handleFocus = () => {
       // Only revalidate if data is stale
       const now = Date.now();
-      if ((now - lastFetchTime.current) >= staleTime) {
+      if ((now - globalCache.timestamp) >= staleTime) {
         fetchContent();
       }
     };
@@ -144,7 +218,7 @@ export function useContent(options: UseContentOptions = {}): UseContentReturn {
   }, [revalidateOnFocus, staleTime, fetchContent]);
 
   const refetch = useCallback(async () => {
-    lastFetchTime.current = 0; // Force refetch by marking as stale
+    globalCache.timestamp = 0; // Force refetch by marking as stale
     await fetchContent();
   }, [fetchContent]);
 

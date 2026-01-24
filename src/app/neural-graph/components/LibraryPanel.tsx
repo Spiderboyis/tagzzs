@@ -61,8 +61,8 @@ function LibraryPanel({
             id="left-panel"
             className="absolute top-0 bottom-0 left-0 w-64 sidebar-panel left-panel flex flex-col border-r border-zinc-800 bg-black pt-14"
         >
-            <div className="p-4 pt-2">
-                <div className="flex items-center justify-between mb-4 pl-1 pr-1">
+            <div className="flex-1 flex flex-col min-h-0 p-4 pt-2">
+                <div className="flex items-center justify-between mb-4 pl-1 pr-1 shrink-0">
                     <h2 className="text-lg font-bold text-white">Library</h2>
                     <button 
                         onClick={onToggle}
@@ -72,7 +72,7 @@ function LibraryPanel({
                         <SidebarSimple weight="bold" />
                     </button>
                 </div>
-                <div id="file-tree" className="flex flex-col gap-1 select-none overflow-y-auto h-full pb-10">
+                <div id="file-tree" className="flex flex-col gap-1 select-none overflow-y-auto flex-1 pb-10">
                     {deepData.map((cat, i) => {
                         const catId = `cat-${i}`;
                         const isCatOpen = expandedGroups.has(catId);

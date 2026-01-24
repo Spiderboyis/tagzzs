@@ -190,11 +190,7 @@ export default function Dashboard() {
              } else {
                  setSelectedYear(y => y + 1);
              }
-        } else if (calendarView === 'Y') { // Year View (navigate range)
-             // Navigate 12 years page? Or just 1 year? Let's do 12 years page logic later if needed.
-             // For now just navigate 1 year to change the 'start' of the range or similar?
-             // Actually currently Year view just shows months? No wait, new Year view will show Years.
-             // Let's assume Year view shows a decade.
+        } else if (calendarView === 'Y') { 
              if (direction === 'prev') {
                  setSelectedYear(y => y - 12);
              } else {

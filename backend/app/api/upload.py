@@ -34,12 +34,16 @@ async def upload_file(
         max_size = 10 * 1024 * 1024
         bucket_name = "user_uploads"
 
+        # Get content type safely (default to application/octet-stream if not provided)
+        content_type = file.content_type or "application/octet-stream"
+        filename = file.filename or f"upload_{int(time.time() * 1000)}"
+
         if fileType == "thumbnail":
             max_size = 2 * 1024 * 1024
             bucket_name = "user_thumbnails"
 
             # Validate thumbnail is an image
-            if not file.content_type.startswith("image/"):
+            if not content_type.startswith("image/"):
                 return JSONResponse(
                     status_code=400,
                     content={"error": "Thumbnail must be an image file"},
@@ -49,7 +53,7 @@ async def upload_file(
             max_size = 2 * 1024 * 1024
             bucket_name = "user_avatars"
 
-            if not file.content_type.startswith("image/"):
+            if not content_type.startswith("image/"):
                 return JSONResponse(
                     status_code=400,
                     content={"error": "Avatar must be an image file"},
@@ -69,7 +73,7 @@ async def upload_file(
 
         # Generate unique filename
         timestamp = int(time.time() * 1000)
-        sanitized_name = re.sub(r"[^a-zA-Z0-9.-]", "_", file.filename)
+        sanitized_name = re.sub(r"[^a-zA-Z0-9.-]", "_", filename)
 
         if fileType == "avatar":
             unique_file_name = f"{user['id']}/{timestamp}_{sanitized_name}"
@@ -81,7 +85,7 @@ async def upload_file(
         supabase.storage.from_(bucket_name).upload(
             path=unique_file_name,
             file=file_content,
-            file_options={"content-type": file.content_type, "upsert": "false"},
+            file_options={"content-type": content_type, "upsert": "false"},
         )
 
         public_url_data = supabase.storage.from_(bucket_name).get_public_url(
@@ -114,13 +118,16 @@ async def upload_file(
                 "fileName": unique_file_name,
                 "fileUrl": {"publicUrl": public_url_data} if isinstance(public_url_data, str) else public_url_data,
                 "fileSize": file_size,
-                "fileType": file.content_type,
-                "originalName": file.filename,
+                "fileType": content_type,
+                "originalName": filename,
                 "bucket": bucket_name,
             },
         )
 
     except Exception as e:
+        import traceback
+        print(f"Upload error: {e}")
+        traceback.print_exc()
         return JSONResponse(
             status_code=500,
             content={"error": "Internal server error", "details": str(e)},

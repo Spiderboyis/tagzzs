@@ -448,7 +448,17 @@ export default function NeuralGraphPage() {
     const render = () => {
       ctx.clearRect(0, 0, width, height);
 
-      const projected = nodesRef.current.map((n) => {
+      const visibleNodes = nodesRef.current.filter((n) => {
+        if (n.type === "root" || n.type === "category" || n.type === "dust")
+          return true;
+        if (selectedNodeRef.current) {
+          if (n.parent === selectedNodeRef.current.id) return true;
+          if (n.id === selectedNodeRef.current.id) return true;
+        }
+        return false;
+      });
+
+      const projected = visibleNodes.map((n) => {
         const p = project(n.x, n.y, n.z);
         return { ...n, px: p.x, py: p.y, scale: p.scale, pz: p.z };
       });

@@ -5,6 +5,8 @@ import NanobotSphere from './NanobotSphere';
 import { X } from '@phosphor-icons/react';
 import { useChat, ChatMessage } from '@/contexts/ChatContext';
 import { CreditBalanceDisplay } from '@/components/CreditBalanceDisplay';
+import StaticParticleOrb from '@/components/ui/StaticParticleOrb';
+import { useUserProfile } from '@/hooks/useUserProfile';
 
 interface NeuralRightPanelProps {
     rightPanelRef: React.RefObject<HTMLDivElement | null>;
@@ -17,6 +19,7 @@ export default function NeuralRightPanel({
     onResetCamera
 }: Omit<NeuralRightPanelProps, 'miniGraphRef'>) {
     const { messages: chatMessages, isSending } = useChat();
+    const { userProfile } = useUserProfile();
 
     return (
         <aside
@@ -44,8 +47,8 @@ export default function NeuralRightPanel({
                 <div className="flex-1 overflow-y-auto space-y-4 p-5 pt-0 pb-4" id="chat-history">
                     {chatMessages.length === 0 && (
                         <div className="flex gap-3 fade-in">
-                            <div className="my-10 w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center shrink-0 text-xs text-white border border-zinc-800">
-                                K
+                            <div className="my-10 w-8 h-8 rounded-full bg-zinc-800/50 flex items-center justify-center shrink-0 overflow-hidden">
+                                <StaticParticleOrb size={32} />
                             </div>
                             <div className="my-10 bg-zinc-900 p-3 rounded-2xl rounded-tl-none text-xs text-zinc-400 leading-relaxed shadow-sm">
                                 Neural interface active. Click a node to analyze its connections.
@@ -56,8 +59,8 @@ export default function NeuralRightPanel({
                         <div key={msg.id || idx} className="flex gap-3 fade-in">
                             {msg.role === 'assistant' ? (
                                 <>
-                                    <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center shrink-0 text-xs text-white border border-zinc-800">
-                                        K
+                                    <div className="w-8 h-8 rounded-full bg-zinc-800/50 flex items-center justify-center shrink-0 overflow-hidden">
+                                        <StaticParticleOrb size={32} />
                                     </div>
                                     <div className="bg-zinc-900 p-3 rounded-2xl rounded-tl-none text-xs text-zinc-400 leading-relaxed shadow-sm">
                                         {msg.content}
@@ -68,8 +71,12 @@ export default function NeuralRightPanel({
                                     <div className="bg-[#A78BFA]/10 border border-[#A78BFA]/20 p-3 rounded-2xl rounded-tr-none text-xs text-zinc-200 leading-relaxed shadow-sm ml-auto max-w-[80%]">
                                         {msg.content}
                                     </div>
-                                    <div className="w-8 h-8 rounded-full bg-[#A78BFA]/20 flex items-center justify-center shrink-0 text-xs text-[#A78BFA] border border-[#A78BFA]/30">
-                                        U
+                                    <div className="w-8 h-8 rounded-full bg-[#A78BFA]/20 flex items-center justify-center shrink-0 border border-[#A78BFA]/30 overflow-hidden">
+                                        {userProfile?.avatar ? (
+                                            <img src={userProfile.avatar} alt="You" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span className="text-xs text-[#A78BFA]">U</span>
+                                        )}
                                     </div>
                                 </>
                             )}
@@ -77,8 +84,8 @@ export default function NeuralRightPanel({
                     ))}
                     {isSending && (
                         <div className="flex gap-3 fade-in">
-                            <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center shrink-0 text-xs text-white border border-zinc-800">
-                                K
+                            <div className="w-8 h-8 rounded-full bg-zinc-800/50 flex items-center justify-center shrink-0 overflow-hidden">
+                                <StaticParticleOrb size={32} />
                             </div>
                             <div className="bg-zinc-900 p-3 rounded-2xl rounded-tl-none text-xs text-zinc-500">
                                 <span className="animate-pulse">...</span>

@@ -127,8 +127,8 @@ export default function RecentActivity({
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                             </svg>
                         </button>
-                        <p className="text-zinc-500 text-sm mb-1">No content yet</p>
-                        <p className="text-zinc-600 text-xs">Add your first item to get started</p>
+                        <p className="text-zinc-500 text-sm mb-1">No content on this date</p>
+                        <p className="text-zinc-600 text-xs">Add Content</p>
                     </div>
                 ) : (
                     // Content cards

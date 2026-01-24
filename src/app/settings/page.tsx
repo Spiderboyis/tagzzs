@@ -486,17 +486,18 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="flex-1 bg-black min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 md:py-10 pb-20">
+      <div className="flex-1 bg-black h-full overflow-y-auto w-full relative">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 md:py-10 pb-32">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-8 sticky top-0 z-30 bg-black/80 backdrop-blur-sm py-4 -mt-4">
           <div>
             <h1 className="text-2xl md:text-3xl font-semibold text-white mb-2">Settings</h1>
             <p className="text-sm text-zinc-500">Manage your account and preferences</p>
           </div>
           <button
             onClick={() => router.push('/dashboard')}
-            className="p-2 text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+            className="p-2 text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-white/5 active:bg-white/10 z-30"
+            type="button"
           >
             <X size={20} />
           </button>
