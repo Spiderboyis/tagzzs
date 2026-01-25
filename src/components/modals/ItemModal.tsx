@@ -72,24 +72,88 @@ export default function ItemModal({ isOpen, content, tags = [], onClose }: ItemM
                     </div>
 
                     {/* Tags */}
-                    <div className="flex flex-wrap gap-2 mb-6">
-                        {tags.map((tag) => (
-                            <span
-                                key={tag.id}
-                                className="px-3 py-1 rounded text-xs font-medium border border-white/10"
-                                style={{ 
-                                    backgroundColor: `${tag.tagColor}15`,
-                                    color: tag.tagColor 
-                                }}
-                            >
-                                {tag.tagName}
-                            </span>
-                        ))}
-                        {tags.length === 0 && content.contentType && (
-                            <span className="px-3 py-1 rounded text-xs font-medium bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
-                                {content.contentType}
-                            </span>
-                        )}
+                    <div className="flex flex-col gap-2 mb-6">
+                        {(() => {
+                            // Helper to build chains from the flat list of tags
+                            const buildChains = (tags: Tag[]) => {
+                                const chains: Tag[][] = [];
+                                const tagMap = new Map(tags.map(t => [t.id, t]));
+                                const visited = new Set<string>();
+
+                                // Find all leaf nodes (tags that are not parents to any other tag in this list)
+                                // actually, easier to find roots of the subset.
+                                // A tag is a root in this context if its parent is NOT in the current tags list.
+                                
+                                const subsetIds = new Set(tags.map(t => t.id));
+                                const roots = tags.filter(t => !t.parentId || !subsetIds.has(t.parentId));
+
+                                roots.forEach(root => {
+                                    const chain: Tag[] = [root];
+                                    let current = root;
+                                    visited.add(current.id);
+
+                                    // Try to find a direct child in the current tags list
+                                    // multiple children are possible in theory, but user wants single chain.
+                                    // If multiple, we just render them alongside or branching.
+                                    // For now, let's just do a simple greedy search for children in the list.
+                                    
+                                    while (true) {
+                                        const children = tags.filter(t => t.parentId === current.id);
+                                        if (children.length === 0) break;
+                                        
+                                        // Pick the first child (assuming linear chain as per requirements)
+                                        const next = children[0];
+                                        chain.push(next);
+                                        visited.add(next.id);
+                                        current = next;
+                                    }
+                                    chains.push(chain);
+                                });
+
+                                // Add any remaining tags that might have been disconnected (shouldn't happen with above logic but safety first)
+                                tags.forEach(t => {
+                                    if (!visited.has(t.id)) {
+                                        chains.push([t]);
+                                    }
+                                });
+
+                                return chains;
+                            };
+
+                            const tagChains = buildChains(tags);
+
+                            if (tagChains.length === 0 && content.contentType) {
+                                return (
+                                    <span className="self-start px-3 py-1 rounded text-xs font-medium bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+                                        {content.contentType}
+                                    </span>
+                                );
+                            }
+
+                            return tagChains.map((chain, idx) => (
+                                <div key={idx} className="flex items-center flex-wrap gap-1">
+                                    {chain.map((tag, i) => (
+                                        <div key={tag.id} className="flex items-center">
+                                            {i > 0 && (
+                                                <span className="text-zinc-600 mx-1">
+                                                    <ArrowRight size={12} weight="bold" />
+                                                </span>
+                                            )}
+                                            <span
+                                                className="px-3 py-1 rounded-full text-xs font-medium border border-white/5 shadow-sm"
+                                                style={{ 
+                                                    backgroundColor: `${tag.tagColor}15`,
+                                                    color: tag.tagColor,
+                                                    borderColor: `${tag.tagColor}30`
+                                                }}
+                                            >
+                                                {tag.tagName}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ));
+                        })()}
                     </div>
 
                     {/* Link to source */}

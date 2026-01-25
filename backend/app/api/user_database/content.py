@@ -615,7 +615,7 @@ async def get_user_content(request: Request, user: dict = Depends(get_current_us
         filters = ContentQueryFilters(**body_data)
 
         query = supabase.table("content").select(
-            "*, notes:personal_notes(note_data), tags:content_tags(tag_details:tags(tagid, tag_name, color_code))"
+            "*, notes:personal_notes(note_data), tags:content_tags(tag_details:tags(tagid, tag_name, color_code, parent_id))"
         ).eq("userid", user_id).eq("is_deleted", False)
 
         content_id = body_data.get("contentId")
@@ -645,9 +645,29 @@ async def get_user_content(request: Request, user: dict = Depends(get_current_us
 
         content_list = []
         for item in raw_data:
-            # Extract only the IDs into tagsId
+            # Extract full tag details
             nested_tags = item.pop("tags", [])
-            tags_id_list = [t["tag_details"]["tagid"] for t in nested_tags if t.get("tag_details")]
+            # Map to frontend structure - matching Tag interface in useTags.ts mostly, 
+            # but usually frontend expects tagsId to be IDs... 
+            # Wait, mapped_item has "tagsId". If I change this to objects, frontend might break if it expects strings.
+            # But earlier I saw ItemModal expects Tag[] objects via "tags" prop.
+            # The ContentItem interface in frontend likely has "tags: Tag[]" OR we are using "tagsId" for something else.
+            # Let's check mapped_item keys. It has "tagsId".
+            # I should add "tags" field to mapped_item with full objects.
+            
+            tags_list = []
+            for t in nested_tags:
+                if t.get("tag_details"):
+                     td = t["tag_details"]
+                     # Normalize keys to camelCase if needed by frontend Tag interface (id, tagName, tagColor, parentId)
+                     tags_list.append({
+                         "id": td["tagid"],
+                         "tagName": td["tag_name"],
+                         "tagColor": td["color_code"],
+                         "parentId": td.get("parent_id")
+                     })
+            
+            tags_id_list = [t["id"] for t in tags_list]
 
             # Flatten Personal Notes
             notes_list = item.pop("notes", [])
@@ -672,6 +692,7 @@ async def get_user_content(request: Request, user: dict = Depends(get_current_us
                 "personalNotes": personal_notes_text,
                 "personalNotesBlocks": personal_notes_blocks,
                 "tagsId": tags_id_list,
+                "tags": tags_list,
                 "createdAt": item.get("created_at"),
                 "updatedAt": item.get("updated_at")
             }

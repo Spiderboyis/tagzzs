@@ -174,9 +174,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
       const now = Date.now();
 
-      // If locked and lock is less than 10 seconds old, skip refresh
+      // If locked and lock is less than 10 seconds old, wait for it to be released
       if (isLocked && now - lockTime < 10000) {
-        return;
+        let attempts = 0;
+        while (attempts < 50) { // Wait up to 5 seconds (50 * 100ms)
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          if (!localStorage.getItem(LOCK_KEY)) {
+            // Lock released!
+            // We assume the other tab/process updated the session.
+            // We just return, user state should be updated via event listener or next fetch?
+            // Actually, AuthContext usually syncs via Supabase client listener, but here we are using fetch.
+            // When refresh succeeds, it sets 'user'. But this instance didn't call fetch.
+            // BUT, the cookies ARE updated in the browser.
+            // So the caller (useAuthenticatedApi) can retry their request safely.
+            return;
+          }
+          attempts++;
+        }
+        // If timed out, proceed to try refreshing ourselves (maybe previous lock holder died)
       }
 
       // Set lock

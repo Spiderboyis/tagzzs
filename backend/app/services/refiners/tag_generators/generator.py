@@ -49,7 +49,9 @@ class TagGenerationEngine:
 
     async def generate(self, request: TagGenerationRequest) -> TagGenerationResponse:
         """
-        Generate tags for text using Groq API.
+        Generate tags for text using Groq API with a single linear hierarchy chain.
+        Sequence: Parent -> Child -> Grandchild
+        Max 3 tags total.
 
         Args:
             request: TagGenerationRequest with text and parameters
@@ -87,9 +89,11 @@ class TagGenerationEngine:
 
             prompt = f"""Analyze the following text and generate a hierarchical tagging structure.
 1. Identify the single most relevant BROAD Category (Parent Tag).
-2. Identify up to 3 specific sub-topics (Child Tags) that fit under that category.
-3. For each tag, provide a confidence score between 0 and 1.
-4. Ensure tags are from the provided list if possible, but you may generate new relevant ones if needed.
+2. Identify a specific Sub-topic (Child 1) that fits under that category.
+3. Identify a more specific Detailed Topic (Child 2) that fits under the Sub-topic.
+4. For each tag, provide a confidence score between 0 and 1.
+5. Ensure tags are from the provided list if possible, but you may generate new relevant ones if needed.
+6. The structure MUST be a linear chain: Parent -> Child 1 -> Child 2.
 
 Available tags (for reference): {labels_str}
 
@@ -98,15 +102,13 @@ Text to analyze:
 
 Please respond in JSON format with this EXACT structure:
 {{
-    "parent_tag": {{
-        "name": "Category_Name",
-        "score": 0.95
-    }},
-    "child_tags": [
-        {{"name": "Specific_Topic_1", "score": 0.90}},
-        {{"name": "Specific_Topic_2", "score": 0.85}}
+    "chain": [
+        {{ "level": "parent", "name": "Broad_Category", "score": 0.95 }},
+        {{ "level": "child", "name": "Sub_Category", "score": 0.90 }},
+        {{ "level": "grandchild", "name": "Specific_Topic", "score": 0.85 }}
     ]
 }}
+Note: The "chain" list can have 1, 2, or 3 items depending on confidence and specificity. Use meaningful names.
 
 Response:"""
 
@@ -131,31 +133,42 @@ Response:"""
                             parsed = json.loads(json_str)
                             response.tags = []
                             
-                            # Process Parent Tag
-                            parent_data = parsed.get("parent_tag")
-                            parent_name = None
-                            if parent_data:
-                                parent_name = parent_data.get("name")
-                                response.tags.append(
-                                    Tag(
-                                        name=parent_name,
-                                        score=float(parent_data.get("score", 0.0)),
-                                        type="parent",
-                                        parent_name=None
-                                    )
-                                )
+                            chain = parsed.get("chain", [])
+                            previous_tag_name = None
+                            
+                            # Validate and add tags in order
+                            for item in chain:
+                                name = item.get("name")
+                                level = item.get("level")
+                                score = float(item.get("score", 0.0))
+                                
+                                if not name:
+                                    continue
+                                    
+                                # Map level string to our specific types just to be safe, though prompt asks for specific keys
+                                if level not in ["parent", "child", "grandchild"]:
+                                    # Fallback if LLM messes up level names
+                                    if previous_tag_name is None:
+                                        level = "parent"
+                                    elif response.tags[-1].type == "parent":
+                                        level = "child"
+                                    else:
+                                        level = "grandchild"
 
-                            # Process Child Tags (Max 3)
-                            children_data = parsed.get("child_tags", [])[:3]
-                            for child in children_data:
                                 response.tags.append(
                                     Tag(
-                                        name=child.get("name"),
-                                        score=float(child.get("score", 0.0)),
-                                        type="child",
-                                        parent_name=parent_name
+                                        name=name,
+                                        score=score,
+                                        type=level,
+                                        parent_name=previous_tag_name
                                     )
                                 )
+                                previous_tag_name = name
+                                
+                                # Enforce max 3 just in case
+                                if len(response.tags) >= 3:
+                                    break
+
                     except (
                         json.JSONDecodeError,
                         KeyError,
@@ -169,7 +182,7 @@ Response:"""
 
                     response.success = len(response.tags) > 0
                     self.logger.info(
-                        f"✅ Tag generation complete. Generated {len(response.tags)} tags"
+                        f"✅ Tag generation complete. Generated {len(response.tags)} tags in chain"
                     )
                     break
 

@@ -73,7 +73,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
   const [previewData, setPreviewData] = useState({
     title: "",
     description: "",
-    tags: [] as string[],
+    tags: [] as (any | any)[], // Support strings or full tag objects // Allow objects with name/parent
     summary: "",
     personalNotes: "",
     source: "",
@@ -202,7 +202,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
           setPreviewData({
             title: content.title || metadata.title || "Untitled",
             description: content.summary || content.description || "", // Prefer AI summary for description
-            tags: (content.tags || []).slice(0, 2).map((tag: any) => typeof tag === 'string' ? tag : tag.name).filter(Boolean), // Limit to 2 most relevant tags, extract name from tag objects
+            tags: (content.tags || []), // Keep full tag objects for hierarchy
             summary: "", // Legacy field removed from UI
             personalNotes: "",
             source: new URL(trimmedUrl).hostname,
@@ -237,7 +237,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
           setPreviewData({
             title: content.title || selectedFile.name || "Untitled",
             description: content.summary || content.description || "", // Prefer AI summary
-            tags: (content.tags || []).slice(0, 2).map((tag: any) => typeof tag === 'string' ? tag : tag.name).filter(Boolean), // Limit to 2 most relevant tags, extract name from tag objects
+            tags: (content.tags || []), // Keep full tag objects
             summary: "",
             personalNotes: "",
             source: "Document",
@@ -274,10 +274,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
           setPreviewData({
             title: "My Idea",
             description: ideaContent,
-            tags: [...(content.tags || []).slice(0, 2).map((tag: any) => typeof tag === 'string' ? tag : tag.name).filter(Boolean), ...ideaTags].slice(
-              0,
-              2
-            ), // Limit refined tags + manually added tags, extract name from tag objects
+            tags: [...(content.tags || []), ...ideaTags], // Keep full objects + strings
             summary: content.summary || "",
             personalNotes: "",
             source: "Ideation",
@@ -328,6 +325,9 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
       const BACKEND_URL =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
+      const tagsId = previewData.tags.map((t: any) => typeof t === 'string' ? t : t.name);
+      const tagsData = previewData.tags.filter((t: any) => typeof t !== 'string');
+
       const payload = {
         link: urlInput || "ideation://local",
         title: previewData.title,
@@ -337,11 +337,12 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
           (activeTab === "document"
             ? "document"
             : activeTab === "ideation"
-            ? "ideation"
-            : "article"),
+              ? "ideation"
+              : "article"),
         personalNotes: previewData.personalNotes,
         readTime: "",
-        tagsId: previewData.tags,
+        tagsId: tagsId,
+        tagsData: tagsData,
         thumbnailUrl: previewData.thumbnail || null,
         rawContent: rawContent,
         summary: "", // No longer sending separate summary
@@ -420,7 +421,15 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
 
   const addTag = (tagToAdd?: string) => {
     const tag = tagToAdd || newTag.trim();
-    if (tag && !previewData.tags.includes(tag)) {
+    if (!tag) return;
+
+    // Check if tag already exists (check name property if object)
+    const exists = previewData.tags.some(t => {
+      const tName = typeof t === 'string' ? t : t.name;
+      return tName.toLowerCase() === tag.toLowerCase();
+    });
+
+    if (!exists) {
       setPreviewData({
         ...previewData,
         tags: [...previewData.tags, tag],
@@ -442,7 +451,10 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
       .filter(
         (tag) =>
           tag.tagName.toLowerCase().includes(value.toLowerCase()) &&
-          !previewData.tags.includes(tag.tagName)
+          !previewData.tags.some(t => {
+            const tName = typeof t === 'string' ? t : t.name;
+            return tName === tag.tagName;
+          })
       )
       .slice(0, 5); // Limit to 5 suggestions
 
@@ -450,10 +462,14 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
     setShowTagSuggestions(filtered.length > 0);
   };
 
-  const removeTag = (tagToRemove: string) => {
+  const removeTag = (tagToRemove: string | any) => {
+    const nameToRemove = typeof tagToRemove === 'string' ? tagToRemove : tagToRemove.name;
     setPreviewData({
       ...previewData,
-      tags: previewData.tags.filter((tag) => tag !== tagToRemove),
+      tags: previewData.tags.filter((tag) => {
+        const tName = typeof tag === 'string' ? tag : tag.name;
+        return tName !== nameToRemove;
+      }),
     });
   };
 
@@ -541,17 +557,17 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                     Let's start organizing
                   </p>
                 </div>
-              <div className="flex items-center gap-3">
-                <CreditBalanceDisplay compact />
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={onClose}
-                  className="p-2 rounded-xl transition-all hover:bg-white/[0.06] text-white/45 hover:text-white"
-                >
-                  <X className="w-5 h-5" />
-                </motion.button>
-              </div>
+                <div className="flex items-center gap-3">
+                  <CreditBalanceDisplay compact />
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={onClose}
+                    className="p-2 rounded-xl transition-all hover:bg-white/[0.06] text-white/45 hover:text-white"
+                  >
+                    <X className="w-5 h-5" />
+                  </motion.button>
+                </div>
               </div>
             </div>
 
@@ -568,11 +584,10 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                         setViewState("capture");
                         setSelectedIdeaType(null);
                       }}
-                      className={`relative py-3.5 transition-all duration-200 flex items-center gap-2 ${
-                        activeTab === tab.id
-                          ? "text-white"
-                          : "text-white/45 hover:text-white/75"
-                      }`}
+                      className={`relative py-3.5 transition-all duration-200 flex items-center gap-2 ${activeTab === tab.id
+                        ? "text-white"
+                        : "text-white/45 hover:text-white/75"
+                        }`}
                       style={{
                         transition: "color 0.2s cubic-bezier(0.2, 0, 0, 1)",
                       }}
@@ -767,11 +782,10 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                           whileTap={{ scale: 0.99 }}
                           onClick={handleAnalyze}
                           disabled={!selectedFile || extractionLoading}
-                          className={`w-full py-3.5 rounded-2xl font-medium transition-all flex items-center justify-center gap-2 ${
-                            selectedFile && !extractionLoading
-                              ? "bg-white text-black hover:bg-[#EDEDED]"
-                              : "bg-white/25 text-white/50 cursor-not-allowed"
-                          }`}
+                          className={`w-full py-3.5 rounded-2xl font-medium transition-all flex items-center justify-center gap-2 ${selectedFile && !extractionLoading
+                            ? "bg-white text-black hover:bg-[#EDEDED]"
+                            : "bg-white/25 text-white/50 cursor-not-allowed"
+                            }`}
                         >
                           {extractionLoading ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -854,11 +868,10 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                             className="w-4 h-4 rounded"
                                           />
                                           <span
-                                            className={`text-sm ${
-                                              item.completed
-                                                ? "text-white/25 line-through"
-                                                : "text-white/90"
-                                            }`}
+                                            className={`text-sm ${item.completed
+                                              ? "text-white/25 line-through"
+                                              : "text-white/90"
+                                              }`}
                                           >
                                             {item.text}
                                           </span>
@@ -1101,7 +1114,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                               key={index}
                               className="px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white/75 border border-white/[0.06]"
                             >
-                              {tag}
+                              {typeof tag === 'string' ? tag : tag.name}
                             </span>
                           ))}
                         </div>
@@ -1248,10 +1261,10 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                   <div className="flex flex-wrap items-center gap-2 mt-2">
                                     {previewData.tags.map((tag, index) => (
                                       <span
-                                        key={`${tag}-${index}`}
+                                        key={`${typeof tag === 'string' ? tag : tag.name}-${index}`}
                                         className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-white/[0.06] text-white/75"
                                       >
-                                        {tag}
+                                        {typeof tag === 'string' ? tag : tag.name}
                                         <button
                                           onClick={() => removeTag(tag)}
                                           className="p-0.5 rounded-full transition-all hover:bg-white/[0.1]"
@@ -1311,13 +1324,12 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                     viewState === "analyzing" ||
                     (activeTab === "ideation" && !selectedIdeaType)
                   }
-                  className={`px-8 py-2.5 rounded-xl font-medium transition-all flex items-center gap-2 ${
-                    isLoading ||
+                  className={`px-8 py-2.5 rounded-xl font-medium transition-all flex items-center gap-2 ${isLoading ||
                     viewState === "analyzing" ||
                     (activeTab === "ideation" && !selectedIdeaType)
-                      ? "bg-white/25 text-white/25 cursor-not-allowed"
-                      : "bg-white text-black hover:bg-[#EDEDED]"
-                  }`}
+                    ? "bg-white/25 text-white/25 cursor-not-allowed"
+                    : "bg-white text-black hover:bg-[#EDEDED]"
+                    }`}
                   style={{
                     boxShadow: "0 12px 24px rgba(0,0,0,0.6)",
                   }}
