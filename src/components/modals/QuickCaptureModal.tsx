@@ -15,8 +15,10 @@ import {
   Clock,
   Loader2,
   Calendar,
+  ArrowRight,
+  GripVertical,
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, Reorder } from "motion/react";
 import { useExtraction } from "@/hooks/useExtraction";
 import { useTags, Tag } from "@/hooks/useTags";
 import { useToast } from "@/hooks/use-toast";
@@ -51,6 +53,8 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [rawContent, setRawContent] = useState("");
+  const [isAddingChildTag, setIsAddingChildTag] = useState(false);
+  const [newChildTagName, setNewChildTagName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Tag Autocomplete State
@@ -102,6 +106,8 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
         setNewTodoTag("");
         setSelectedFile(null);
         setRawContent("");
+        setIsAddingChildTag(false);
+        setNewChildTagName("");
         setFilteredTags([]);
         setShowTagSuggestions(false);
         setPreviewData({
@@ -493,6 +499,84 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
 
   const removeTodoTag = (tagToRemove: string) => {
     setTodoTags(todoTags.filter((tag) => tag !== tagToRemove));
+  };
+
+  // Helper: Sort tags by hierarchy (parent first, then children)
+  const getSortedTags = () => {
+    const tags = previewData.tags;
+    if (!tags.length) return [];
+    
+    // Separate parent and children
+    const parent = tags.find((t: any) => 
+      typeof t !== 'string' && (t.type === 'parent' || !t.parent)
+    );
+    const children = tags.filter((t: any) => 
+      typeof t !== 'string' && t.type === 'child' && t.parent
+    );
+    const stringTags = tags.filter((t: any) => typeof t === 'string');
+    
+    // Parent first, then children, then any plain strings
+    const result: any[] = [];
+    if (parent) result.push(parent);
+    result.push(...children);
+    result.push(...stringTags);
+    
+    return result.length ? result : tags;
+  };
+
+  // Helper: Get tag display name
+  const getTagName = (tag: any) => typeof tag === 'string' ? tag : tag.name;
+
+  // Helper: Get parent tag name (first tag or explicit parent type)
+  const getParentTagName = () => {
+    const sorted = getSortedTags();
+    if (!sorted.length) return null;
+    const first = sorted[0];
+    return getTagName(first);
+  };
+
+  // Add child tag
+  const addChildTag = () => {
+    const name = newChildTagName.trim();
+    if (!name) return;
+    
+    const parentName = getParentTagName();
+    const exists = previewData.tags.some(t => getTagName(t).toLowerCase() === name.toLowerCase());
+    
+    if (!exists) {
+      const newTag = {
+        name,
+        type: 'child',
+        parent: parentName,
+      };
+      setPreviewData({
+        ...previewData,
+        tags: [...previewData.tags, newTag],
+      });
+    }
+    
+    setNewChildTagName("");
+    setIsAddingChildTag(false);
+  };
+
+  // Handle tag reorder
+  const handleTagReorder = (newOrder: any[]) => {
+    if (!newOrder.length) return;
+    
+    // First tag becomes parent, rest become children
+    const parentName = getTagName(newOrder[0]);
+    const updatedTags = newOrder.map((tag, index) => {
+      const name = getTagName(tag);
+      if (index === 0) {
+        return { name, type: 'parent', parent: null };
+      }
+      return { name, type: 'child', parent: parentName };
+    });
+    
+    setPreviewData({
+      ...previewData,
+      tags: updatedTags,
+    });
   };
 
   const tabs = [
@@ -1107,16 +1191,79 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                           </span>
                         </div>
 
-                        {/* Tags */}
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {previewData.tags.map((tag, index) => (
-                            <span
-                              key={index}
-                              className="px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white/75 border border-white/[0.06]"
+                        {/* Tags - Hierarchical Display with Drag-and-Drop */}
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <Reorder.Group
+                              axis="x"
+                              values={getSortedTags()}
+                              onReorder={handleTagReorder}
+                              className="flex items-center gap-1 flex-wrap"
                             >
-                              {typeof tag === 'string' ? tag : tag.name}
-                            </span>
-                          ))}
+                              {getSortedTags().map((tag, index) => (
+                                <div key={getTagName(tag)} className="flex items-center">
+                                  {/* Arrow before child tags */}
+                                  {index > 0 && (
+                                    <ArrowRight className="w-4 h-4 text-white/30 mx-1 flex-shrink-0" />
+                                  )}
+                                  <Reorder.Item
+                                    value={tag}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white/75 border border-white/[0.06] cursor-grab active:cursor-grabbing hover:bg-white/[0.1] transition-colors"
+                                    whileDrag={{ scale: 1.05, boxShadow: "0 4px 12px rgba(0,0,0,0.4)" }}
+                                  >
+                                    <GripVertical className="w-3 h-3 text-white/30" />
+                                    <span>{getTagName(tag)}</span>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeTag(tag);
+                                      }}
+                                      className="p-0.5 rounded-full hover:bg-white/[0.15] transition-colors"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </Reorder.Item>
+                                </div>
+                              ))}
+                            </Reorder.Group>
+                            
+                            {/* Add Button - OUTSIDE Reorder.Group */}
+                            {getSortedTags().length > 0 && (
+                              <ArrowRight className="w-4 h-4 text-white/30 mx-1 flex-shrink-0" />
+                            )}
+                            {isAddingChildTag ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={newChildTagName}
+                                  onChange={(e) => setNewChildTagName(e.target.value)}
+                                  onKeyPress={(e) => e.key === "Enter" && addChildTag()}
+                                  onBlur={() => {
+                                    if (!newChildTagName.trim()) {
+                                      setIsAddingChildTag(false);
+                                    }
+                                  }}
+                                  placeholder="New tag..."
+                                  autoFocus
+                                  className="px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white placeholder:text-white/45 border border-white/[0.12] outline-none focus:border-[#A78BFA] w-28"
+                                />
+                                <button
+                                  onClick={addChildTag}
+                                  className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition-colors"
+                                >
+                                  <Plus className="w-3.5 h-3.5 text-white/75" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setIsAddingChildTag(true)}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white/60 border border-dashed border-white/[0.12] hover:border-white/[0.25] hover:text-white/80 transition-all"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Add</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1191,90 +1338,78 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                 <label className="block text-sm font-medium mb-2 text-white/70">
                                   Tags
                                 </label>
-                                <div className="relative">
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="text"
-                                      value={newTag}
-                                      onChange={(e) =>
-                                        handleTagInputChange(e.target.value)
-                                      }
-                                      onFocus={() => {
-                                        if (newTag.trim())
-                                          setShowTagSuggestions(true);
-                                      }}
-                                      onBlur={() => {
-                                        // Delay hiding to allow clicking suggestions
-                                        setTimeout(
-                                          () => setShowTagSuggestions(false),
-                                          200
-                                        );
-                                      }}
-                                      onKeyPress={(e) =>
-                                        e.key === "Enter" && addTag()
-                                      }
-                                      placeholder="Add a tag..."
-                                      className="flex-1 px-4 py-2.5 rounded-xl border border-white/[0.06] bg-[#0B0B0D] text-white placeholder:text-white/45 focus:border-white/[0.12] transition-all outline-none"
-                                    />
-                                    <button
-                                      onClick={() => addTag()}
-                                      className="px-4 py-2.5 rounded-xl transition-all bg-white/[0.06] text-white hover:bg-white/[0.1]"
-                                    >
-                                      <Plus className="w-4 h-4" />
-                                    </button>
-                                  </div>
-
-                                  {/* Tag Suggestions Dropdown */}
-                                  <AnimatePresence>
-                                    {showTagSuggestions &&
-                                      filteredTags.length > 0 && (
-                                        <motion.div
-                                          initial={{ opacity: 0, y: -10 }}
-                                          animate={{ opacity: 1, y: 0 }}
-                                          exit={{ opacity: 0, y: -10 }}
-                                          className="absolute left-0 right-0 top-full mt-2 bg-[#1A1A1C] border border-white/[0.1] rounded-xl overflow-hidden z-20 shadow-xl"
+                                {/* Hierarchical Tags with Drag-and-Drop */}
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <Reorder.Group
+                                    axis="x"
+                                    values={getSortedTags()}
+                                    onReorder={handleTagReorder}
+                                    className="flex items-center gap-1 flex-wrap"
+                                  >
+                                    {getSortedTags().map((tag, index) => (
+                                      <div key={getTagName(tag)} className="flex items-center">
+                                        {/* Arrow before child tags */}
+                                        {index > 0 && (
+                                          <ArrowRight className="w-4 h-4 text-white/30 mx-1 flex-shrink-0" />
+                                        )}
+                                        <Reorder.Item
+                                          value={tag}
+                                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white/75 border border-white/[0.06] cursor-grab active:cursor-grabbing hover:bg-white/[0.1] transition-colors"
+                                          whileDrag={{ scale: 1.05, boxShadow: "0 4px 12px rgba(0,0,0,0.4)" }}
                                         >
-                                          {filteredTags.map((tag) => (
-                                            <button
-                                              key={tag.id}
-                                              onClick={() =>
-                                                addTag(tag.tagName)
-                                              }
-                                              className="w-full text-left px-4 py-2.5 hover:bg-white/[0.06] flex items-center gap-2 transition-colors"
-                                            >
-                                              <div
-                                                className="w-2 h-2 rounded-full"
-                                                style={{
-                                                  backgroundColor: tag.tagColor,
-                                                }}
-                                              />
-                                              <span className="text-sm text-white/90">
-                                                {tag.tagName}
-                                              </span>
-                                            </button>
-                                          ))}
-                                        </motion.div>
-                                      )}
-                                  </AnimatePresence>
-                                </div>
-                                {previewData.tags.length > 0 && (
-                                  <div className="flex flex-wrap items-center gap-2 mt-2">
-                                    {previewData.tags.map((tag, index) => (
-                                      <span
-                                        key={`${typeof tag === 'string' ? tag : tag.name}-${index}`}
-                                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-white/[0.06] text-white/75"
-                                      >
-                                        {typeof tag === 'string' ? tag : tag.name}
-                                        <button
-                                          onClick={() => removeTag(tag)}
-                                          className="p-0.5 rounded-full transition-all hover:bg-white/[0.1]"
-                                        >
-                                          <X className="w-3 h-3" />
-                                        </button>
-                                      </span>
+                                          <GripVertical className="w-3 h-3 text-white/30" />
+                                          <span>{getTagName(tag)}</span>
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              removeTag(tag);
+                                            }}
+                                            className="p-0.5 rounded-full hover:bg-white/[0.15] transition-colors"
+                                          >
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                        </Reorder.Item>
+                                      </div>
                                     ))}
-                                  </div>
-                                )}
+                                  </Reorder.Group>
+                                  
+                                  {/* Add Button - OUTSIDE Reorder.Group */}
+                                  {getSortedTags().length > 0 && (
+                                    <ArrowRight className="w-4 h-4 text-white/30 mx-1 flex-shrink-0" />
+                                  )}
+                                  {isAddingChildTag ? (
+                                    <div className="flex items-center gap-1">
+                                      <input
+                                        type="text"
+                                        value={newChildTagName}
+                                        onChange={(e) => setNewChildTagName(e.target.value)}
+                                        onKeyPress={(e) => e.key === "Enter" && addChildTag()}
+                                        onBlur={() => {
+                                          if (!newChildTagName.trim()) {
+                                            setIsAddingChildTag(false);
+                                          }
+                                        }}
+                                        placeholder="New tag..."
+                                        autoFocus
+                                        className="px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white placeholder:text-white/45 border border-white/[0.12] outline-none focus:border-[#A78BFA] w-28"
+                                      />
+                                      <button
+                                        onClick={addChildTag}
+                                        className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition-colors"
+                                      >
+                                        <Plus className="w-3.5 h-3.5 text-white/75" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => setIsAddingChildTag(true)}
+                                      className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white/60 border border-dashed border-white/[0.12] hover:border-white/[0.25] hover:text-white/80 transition-all"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                      <span>Add</span>
+                                    </button>
+                                  )}
+                                </div>
                               </div>
 
                               <div>

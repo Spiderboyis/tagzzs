@@ -193,7 +193,7 @@ export default function NeuralGraphPage() {
 
     setSelectedNode(node);
     isFocusedRef.current = true;
-    zoomRef.current = 2.0;
+    zoomRef.current = 2.5; // Increased for stronger centering effect
     targetFocusPosRef.current = { x: node.x, y: node.y, z: node.z };
     targetRotationRef.current.x = 0;
 
@@ -449,12 +449,40 @@ export default function NeuralGraphPage() {
       ctx.clearRect(0, 0, width, height);
 
       const visibleNodes = nodesRef.current.filter((n) => {
-        if (n.type === "root" || n.type === "category" || n.type === "dust")
-          return true;
-        if (selectedNodeRef.current) {
-          if (n.parent === selectedNodeRef.current.id) return true;
-          if (n.id === selectedNodeRef.current.id) return true;
+        // Always show dust particles
+        if (n.type === "dust") return true;
+        
+        // When no selection, show root and categories
+        if (!selectedNodeRef.current) {
+          return n.type === "root" || n.type === "category";
         }
+        
+        const selected = selectedNodeRef.current;
+        
+        // When a category is selected: show root (parent), the category, its subs, and their content
+        if (selected.type === "category") {
+          if (n.type === "root") return true; // Show root for back navigation
+          if (n.id === selected.id) return true; // The selected category
+          if (n.parent === selected.id) return true; // Its children (subs)
+          // Content under subs of this category
+          const parentNode = nodesRef.current.find(p => p.id === n.parent);
+          if (parentNode && parentNode.parent === selected.id) return true;
+          return false;
+        }
+        
+        // When a sub is selected: show parent category, the sub, and its content
+        if (selected.type === "sub") {
+          if (n.id === selected.parent) return true; // Parent category for back navigation
+          if (n.id === selected.id) return true; // The selected sub
+          if (n.parent === selected.id) return true; // Its content
+          return false;
+        }
+        
+        // When content is selected (shouldn't happen as we navigate away)
+        if (n.id === selected.parent) return true; // Parent for back nav
+        if (n.id === selected.id) return true;
+        if (n.parent === selected.id) return true;
+        
         return false;
       });
 
