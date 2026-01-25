@@ -73,7 +73,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
   const [previewData, setPreviewData] = useState({
     title: "",
     description: "",
-    tags: [] as any[], // Allow objects with name/parent
+    tags: [] as (any | any)[], // Support strings or full tag objects // Allow objects with name/parent
     summary: "",
     personalNotes: "",
     source: "",
@@ -202,7 +202,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
           setPreviewData({
             title: content.title || metadata.title || "Untitled",
             description: content.summary || content.description || "", // Prefer AI summary for description
-            tags: (content.tags || []).slice(0, 3).map((tag: any) => typeof tag === 'string' ? { name: tag } : tag).filter(Boolean), // Keep full tag objects (max 3)
+            tags: (content.tags || []), // Keep full tag objects for hierarchy
             summary: "", // Legacy field removed from UI
             personalNotes: "",
             source: new URL(trimmedUrl).hostname,
@@ -212,8 +212,12 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
           setRawContent(content.extracted_text || content.rawContent || "");
           setViewState("preview");
         } else {
-          // ...
-          // ...
+          toast({
+            title: "Error",
+            description: extractionError || "Extraction failed",
+            variant: "destructive",
+          });
+          setViewState("capture");
         }
       } else if (activeTab === "document") {
         if (!selectedFile) {
@@ -233,7 +237,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
           setPreviewData({
             title: content.title || selectedFile.name || "Untitled",
             description: content.summary || content.description || "", // Prefer AI summary
-            tags: (content.tags || []).slice(0, 3).map((tag: any) => typeof tag === 'string' ? { name: tag } : tag).filter(Boolean), // Keep full tag objects
+            tags: (content.tags || []), // Keep full tag objects
             summary: "",
             personalNotes: "",
             source: "Document",
@@ -241,26 +245,36 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
             contentType: metadata.contentType || "document",
           });
           setRawContent(content.extracted_text || content.rawContent || "");
-          // ...
+          if (metadata.sourceUrl || (metadata as any).originalUrl) {
+            setUrlInput(metadata.sourceUrl || (metadata as any).originalUrl);
+          }
+          setViewState("preview");
         } else {
-          // ...
-          // ...
+          toast({
+            title: "Error",
+            description: extractionError || "Document extraction failed",
+            variant: "destructive",
+          });
+          setViewState("capture");
         }
       } else if (activeTab === "ideation" && selectedIdeaType === "idea") {
-        // ...
+        if (!ideaContent.trim()) {
+          toast({
+            title: "Error",
+            description: "Please enter your idea",
+            variant: "destructive",
+          });
+          setViewState("capture");
+          return;
+        }
+
         const result = await refineText(ideaContent);
         if (result) {
           const content = result.content || {};
-          // Map ideaTags (strings) to objects
-          const manualTags = ideaTags.map(t => ({ name: t }));
-
           setPreviewData({
             title: "My Idea",
             description: ideaContent,
-            tags: [...(content.tags || []).slice(0, 3).map((tag: any) => typeof tag === 'string' ? { name: tag } : tag).filter(Boolean), ...manualTags].slice(
-              0,
-              3
-            ), // Limit refined tags + manually added tags
+            tags: [...(content.tags || []), ...ideaTags], // Keep full objects + strings
             summary: content.summary || "",
             personalNotes: "",
             source: "Ideation",
@@ -311,6 +325,9 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
       const BACKEND_URL =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
+      const tagsId = previewData.tags.map((t: any) => typeof t === 'string' ? t : t.name);
+      const tagsData = previewData.tags.filter((t: any) => typeof t !== 'string');
+
       const payload = {
         link: urlInput || "ideation://local",
         title: previewData.title,
@@ -324,15 +341,8 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
               : "article"),
         personalNotes: previewData.personalNotes,
         readTime: "",
-        tagsId: previewData.tags.map(t => typeof t === 'string' ? t : t.name),
-        tagsData: previewData.tags.map(t => {
-          if (typeof t === 'string') return { name: t };
-          return {
-            name: t.name,
-            parent: t.parent || null,
-            score: t.score
-          };
-        }),
+        tagsId: tagsId,
+        tagsData: tagsData,
         thumbnailUrl: previewData.thumbnail || null,
         rawContent: rawContent,
         summary: "", // No longer sending separate summary
@@ -411,12 +421,18 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
 
   const addTag = (tagToAdd?: string) => {
     const tag = tagToAdd || newTag.trim();
-    const existingNames = previewData.tags.map(t => typeof t === 'string' ? t : t.name);
+    if (!tag) return;
 
-    if (tag && !existingNames.includes(tag)) {
+    // Check if tag already exists (check name property if object)
+    const exists = previewData.tags.some(t => {
+      const tName = typeof t === 'string' ? t : t.name;
+      return tName.toLowerCase() === tag.toLowerCase();
+    });
+
+    if (!exists) {
       setPreviewData({
         ...previewData,
-        tags: [...previewData.tags, tag], // Manual tags are strings
+        tags: [...previewData.tags, tag],
       });
       setNewTag("");
       setShowTagSuggestions(false);
@@ -431,13 +447,14 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
       return;
     }
 
-    const existingNames = previewData.tags.map(t => typeof t === 'string' ? t : t.name);
-
     const filtered = existingTags
       .filter(
         (tag) =>
           tag.tagName.toLowerCase().includes(value.toLowerCase()) &&
-          !existingNames.includes(tag.tagName)
+          !previewData.tags.some(t => {
+            const tName = typeof t === 'string' ? t : t.name;
+            return tName === tag.tagName;
+          })
       )
       .slice(0, 5); // Limit to 5 suggestions
 
@@ -445,12 +462,13 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
     setShowTagSuggestions(filtered.length > 0);
   };
 
-  const removeTag = (tagToRemove: string) => {
+  const removeTag = (tagToRemove: string | any) => {
+    const nameToRemove = typeof tagToRemove === 'string' ? tagToRemove : tagToRemove.name;
     setPreviewData({
       ...previewData,
       tags: previewData.tags.filter((tag) => {
-        const name = typeof tag === 'string' ? tag : tag.name;
-        return name !== tagToRemove;
+        const tName = typeof tag === 'string' ? tag : tag.name;
+        return tName !== nameToRemove;
       }),
     });
   };
@@ -1096,7 +1114,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                               key={index}
                               className="px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white/75 border border-white/[0.06]"
                             >
-                              {tag}
+                              {typeof tag === 'string' ? tag : tag.name}
                             </span>
                           ))}
                         </div>
@@ -1241,23 +1259,20 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                 </div>
                                 {previewData.tags.length > 0 && (
                                   <div className="flex flex-wrap items-center gap-2 mt-2">
-                                    {previewData.tags.map((tag, index) => {
-                                      const tagName = typeof tag === 'string' ? tag : tag.name;
-                                      return (
-                                        <span
-                                          key={`${tagName}-${index}`}
-                                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-white/[0.06] text-white/75"
+                                    {previewData.tags.map((tag, index) => (
+                                      <span
+                                        key={`${typeof tag === 'string' ? tag : tag.name}-${index}`}
+                                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-white/[0.06] text-white/75"
+                                      >
+                                        {typeof tag === 'string' ? tag : tag.name}
+                                        <button
+                                          onClick={() => removeTag(tag)}
+                                          className="p-0.5 rounded-full transition-all hover:bg-white/[0.1]"
                                         >
-                                          {tagName}
-                                          <button
-                                            onClick={() => removeTag(tagName)}
-                                            className="p-0.5 rounded-full transition-all hover:bg-white/[0.1]"
-                                          >
-                                            <X className="w-3 h-3" />
-                                          </button>
-                                        </span>
-                                      );
-                                    })}
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </span>
+                                    ))}
                                   </div>
                                 )}
                               </div>

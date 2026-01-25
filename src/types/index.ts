@@ -11,6 +11,7 @@ export interface ContentItem {
   personalNotes: string;
   personalNotesBlocks?: any[]; // Store block-based notes
   tagsId: string[];
+  tags?: Tag[];
   createdAt: string;
   updatedAt: string;
 }
@@ -39,5 +40,6 @@ export interface Tag {
   tagName: string;
   tagColor: string;
   userId: string;
+  parentId?: string | null;
   createdAt: string;
 }

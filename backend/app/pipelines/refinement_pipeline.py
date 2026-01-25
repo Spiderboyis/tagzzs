@@ -210,7 +210,8 @@ class RefinementPipeline:
                             {
                                 "name": tag.name,
                                 "parent": tag.parent_name,
-                                "score": tag.score
+                                "score": tag.score,
+                                "type": tag.type
                             }
                             for tag in tag_response.tags
                         ]
