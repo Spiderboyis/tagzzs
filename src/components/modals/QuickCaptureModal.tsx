@@ -53,8 +53,12 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [rawContent, setRawContent] = useState("");
-  const [isAddingChildTag, setIsAddingChildTag] = useState(false);
+  const [addingContext, setAddingContext] = useState<
+    "none" | "preview" | "metadata"
+  >("none");
   const [newChildTagName, setNewChildTagName] = useState("");
+  const [editingTagIndex, setEditingTagIndex] = useState<number | null>(null);
+  const [editingTagName, setEditingTagName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Tag Autocomplete State
@@ -106,8 +110,10 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
         setNewTodoTag("");
         setSelectedFile(null);
         setRawContent("");
-        setIsAddingChildTag(false);
+        setAddingContext("none");
         setNewChildTagName("");
+        setEditingTagIndex(null);
+        setEditingTagName("");
         setFilteredTags([]);
         setShowTagSuggestions(false);
         setPreviewData({
@@ -589,7 +595,57 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
     }
 
     setNewChildTagName("");
-    setIsAddingChildTag(false);
+    setAddingContext("none");
+  };
+
+  // Handle tag edit
+  const startEditingTag = (index: number, name: string) => {
+    setEditingTagIndex(index);
+    setEditingTagName(name);
+  };
+
+  const finishEditingTag = () => {
+    if (editingTagIndex === null) return;
+
+    const name = editingTagName.trim();
+    if (!name) {
+      setEditingTagIndex(null);
+      return;
+    }
+
+    const sortedTags = getSortedTags();
+    const oldTag = sortedTags[editingTagIndex];
+    const oldName = getTagName(oldTag);
+
+    if (oldName === name) {
+      setEditingTagIndex(null);
+      return;
+    }
+
+    // Update the tag and its children's parent references
+    const updatedTags = previewData.tags.map((tag) => {
+      const tagName = getTagName(tag);
+      const isTarget = tagName === oldName;
+
+      if (isTarget) {
+        if (typeof tag === "string") return name;
+        return { ...tag, name: name };
+      }
+
+      // Update parent reference if it matches
+      if (typeof tag === "object" && tag.parent === oldName) {
+        return { ...tag, parent: name };
+      }
+
+      return tag;
+    });
+
+    setPreviewData({
+      ...previewData,
+      tags: updatedTags,
+    });
+    setEditingTagIndex(null);
+    setEditingTagName("");
   };
 
   // Handle tag reorder
@@ -1245,35 +1301,71 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                               className="flex items-center gap-1 flex-wrap"
                             >
                               {getSortedTags().map((tag, index) => (
-                                <div
+                                <Reorder.Item
                                   key={getTagName(tag)}
-                                  className="flex items-center"
+                                  value={tag}
+                                  className="flex items-center group relative cursor-grab active:cursor-grabbing"
+                                  whileDrag={{
+                                    scale: 1.05,
+                                    boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+                                    zIndex: 50,
+                                  }}
                                 >
-                                  {/* Arrow before child tags */}
+                                  {/* Arrow before child tags (except first) */}
                                   {index > 0 && (
-                                    <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
+                                    <ArrowRight className="w-3.5 h-3.5 text-white/30 mr-0.5 shrink-0" />
                                   )}
-                                  <Reorder.Item
-                                    value={tag}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/75 border border-white/6 cursor-grab active:cursor-grabbing hover:bg-white/10 transition-colors"
-                                    whileDrag={{
-                                      scale: 1.05,
-                                      boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
-                                    }}
+                                  {/* Badge */}
+                                  <div
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                                      editingTagIndex === index
+                                        ? "bg-white/10 border-[#A78BFA] ring-1 ring-[#A78BFA]/50"
+                                        : "bg-white/6 text-white/75 border-white/6 hover:bg-white/10"
+                                    }`}
                                   >
-                                    <GripVertical className="w-3 h-3 text-white/30" />
-                                    <span>{getTagName(tag)}</span>
+                                    <GripVertical className="w-3 h-3 text-white/30 shrink-0" />
+                                    {editingTagIndex === index ? (
+                                      <input
+                                        type="text"
+                                        value={editingTagName}
+                                        onChange={(e) =>
+                                          setEditingTagName(e.target.value)
+                                        }
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter")
+                                            finishEditingTag();
+                                          if (e.key === "Escape")
+                                            setEditingTagIndex(null);
+                                        }}
+                                        onBlur={finishEditingTag}
+                                        autoFocus
+                                        className="bg-transparent border-none outline-none text-white w-24 text-sm"
+                                      />
+                                    ) : (
+                                      <span
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          startEditingTag(
+                                            index,
+                                            getTagName(tag),
+                                          );
+                                        }}
+                                        className="cursor-text hover:text-white truncate max-w-[150px]"
+                                      >
+                                        {getTagName(tag)}
+                                      </span>
+                                    )}
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         removeTag(tag);
                                       }}
-                                      className="p-0.5 rounded-full hover:bg-white/15 transition-colors"
+                                      className="p-0.5 ml-1 rounded-full hover:bg-white/15 transition-colors shrink-0"
                                     >
                                       <X className="w-3 h-3" />
                                     </button>
-                                  </Reorder.Item>
-                                </div>
+                                  </div>
+                                </Reorder.Item>
                               ))}
                             </Reorder.Group>
 
@@ -1281,7 +1373,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                             {getSortedTags().length > 0 && (
                               <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
                             )}
-                            {isAddingChildTag ? (
+                            {addingContext === "preview" ? (
                               <div className="flex items-center gap-1">
                                 <input
                                   type="text"
@@ -1289,12 +1381,14 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                   onChange={(e) =>
                                     setNewChildTagName(e.target.value)
                                   }
-                                  onKeyPress={(e) =>
-                                    e.key === "Enter" && addChildTag()
-                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") addChildTag();
+                                    if (e.key === "Escape")
+                                      setAddingContext("none");
+                                  }}
                                   onBlur={() => {
                                     if (!newChildTagName.trim()) {
-                                      setIsAddingChildTag(false);
+                                      setAddingContext("none");
                                     }
                                   }}
                                   placeholder="New tag..."
@@ -1310,8 +1404,11 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                               </div>
                             ) : (
                               <button
-                                onClick={() => setIsAddingChildTag(true)}
-                                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/60 border border-dashed border-white/12 hover:border-white/25 hover:text-white/80 transition-all"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAddingContext("preview");
+                                }}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/60 border border-dashed border-white/12 hover:border-white/25 hover:text-white/80 transition-all cursor-pointer"
                               >
                                 <Plus className="w-3.5 h-3.5" />
                                 <span>Add</span>
@@ -1401,36 +1498,73 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                     className="flex items-center gap-1 flex-wrap"
                                   >
                                     {getSortedTags().map((tag, index) => (
-                                      <div
+                                      <Reorder.Item
                                         key={getTagName(tag)}
-                                        className="flex items-center"
+                                        value={tag}
+                                        className="flex items-center group relative cursor-grab active:cursor-grabbing"
+                                        whileDrag={{
+                                          scale: 1.05,
+                                          zIndex: 50,
+                                        }}
                                       >
-                                        {/* Arrow before child tags */}
+                                        {/* Arrow before child tags (except first) */}
                                         {index > 0 && (
                                           <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
                                         )}
-                                        <Reorder.Item
-                                          value={tag}
-                                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/75 border border-white/6 cursor-grab active:cursor-grabbing hover:bg-white/10 transition-colors"
-                                          whileDrag={{
-                                            scale: 1.05,
-                                            boxShadow:
-                                              "0 4px 12px rgba(0,0,0,0.4)",
-                                          }}
+
+                                        {/* Badge */}
+                                        <div
+                                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-colors shadow-sm ${
+                                            editingTagIndex === index
+                                              ? "bg-white/10 border-[#A78BFA] ring-1 ring-[#A78BFA]/50"
+                                              : "bg-white/6 text-white/75 border-white/6 hover:bg-white/10"
+                                          }`}
                                         >
-                                          <GripVertical className="w-3 h-3 text-white/30" />
-                                          <span>{getTagName(tag)}</span>
+                                          <GripVertical className="w-3 h-3 text-white/30 shrink-0" />
+                                          {editingTagIndex === index ? (
+                                            <input
+                                              type="text"
+                                              value={editingTagName}
+                                              onChange={(e) =>
+                                                setEditingTagName(
+                                                  e.target.value,
+                                                )
+                                              }
+                                              onKeyDown={(e) => {
+                                                if (e.key === "Enter")
+                                                  finishEditingTag();
+                                                if (e.key === "Escape")
+                                                  setEditingTagIndex(null);
+                                              }}
+                                              onBlur={finishEditingTag}
+                                              autoFocus
+                                              className="bg-transparent border-none outline-none text-white w-24 text-sm"
+                                            />
+                                          ) : (
+                                            <span
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                startEditingTag(
+                                                  index,
+                                                  getTagName(tag),
+                                                );
+                                              }}
+                                              className="cursor-text hover:text-white truncate max-w-[150px]"
+                                            >
+                                              {getTagName(tag)}
+                                            </span>
+                                          )}
                                           <button
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               removeTag(tag);
                                             }}
-                                            className="p-0.5 rounded-full hover:bg-white/15 transition-colors"
+                                            className="p-0.5 ml-1 rounded-full hover:bg-white/15 transition-colors shrink-0"
                                           >
                                             <X className="w-3 h-3" />
                                           </button>
-                                        </Reorder.Item>
-                                      </div>
+                                        </div>
+                                      </Reorder.Item>
                                     ))}
                                   </Reorder.Group>
 
@@ -1438,7 +1572,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                   {getSortedTags().length > 0 && (
                                     <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
                                   )}
-                                  {isAddingChildTag ? (
+                                  {addingContext === "metadata" ? (
                                     <div className="flex items-center gap-1">
                                       <input
                                         type="text"
@@ -1446,12 +1580,14 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                         onChange={(e) =>
                                           setNewChildTagName(e.target.value)
                                         }
-                                        onKeyPress={(e) =>
-                                          e.key === "Enter" && addChildTag()
-                                        }
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") addChildTag();
+                                          if (e.key === "Escape")
+                                            setAddingContext("none");
+                                        }}
                                         onBlur={() => {
                                           if (!newChildTagName.trim()) {
-                                            setIsAddingChildTag(false);
+                                            setAddingContext("none");
                                           }
                                         }}
                                         placeholder="New tag..."
@@ -1467,7 +1603,10 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                     </div>
                                   ) : (
                                     <button
-                                      onClick={() => setIsAddingChildTag(true)}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setAddingContext("metadata");
+                                      }}
                                       className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/60 border border-dashed border-white/12 hover:border-white/25 hover:text-white/80 transition-all cursor-pointer"
                                     >
                                       <Plus className="w-3.5 h-3.5" />
