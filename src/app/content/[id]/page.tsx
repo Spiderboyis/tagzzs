@@ -3,7 +3,7 @@
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useContent } from "@/hooks/useContent";
-import { useTags } from "@/hooks/useTags";
+import { useTags, getTagLineage } from "@/hooks/useTags";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import DetailView from "@/app/database/components/DetailView";
 import { X, SidebarSimple, Sparkle } from "@phosphor-icons/react";
@@ -55,8 +55,7 @@ export default function ContentPage() {
 
     return {
       id: currentItem.id,
-      image:
-        currentItem.thumbnailUrl || `/default.jpg`,
+      image: currentItem.thumbnailUrl || `/default.jpg`,
       category: tags[0]?.tagName || "General",
       subCategory: tags[1]?.tagName || "",
       title: currentItem.title,
@@ -65,14 +64,18 @@ export default function ContentPage() {
       contentBlocks: currentItem.personalNotesBlocks, // Pass block data
       tags: tags.map((t: any) => {
         let name = t.tagName;
-        // If the tag name looks like a UUID, it might be a mistakenly created tag where the name IS the ID of another tag.
-        // Try to resolve the real name from the tagsMap.
+        // If name matches UUID regex, try to resolve it (legacy)
         if (UUID_REGEX.test(name)) {
-          const originalTag = tagsMap.get(name);
-          if (originalTag) {
-            name = originalTag.tagName;
-          }
+          const original = tagsMap.get(name);
+          if (original) name = original.tagName;
         }
+
+        // Generate lineage breadcrumb
+        const lineage = getTagLineage(t.id, tagsMap);
+        if (lineage.length > 0) {
+          name = lineage.join(" > ");
+        }
+
         return { id: t.id, name };
       }),
       _original: currentItem,
@@ -98,7 +101,7 @@ export default function ContentPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   const [sidebarExpandedCats, setSidebarExpandedCats] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const graphRef = useRef<SVGSVGElement>(null);
 
@@ -125,7 +128,7 @@ export default function ContentPage() {
         }
       }
     },
-    [content, id, router, isNeuralSource]
+    [content, id, router, isNeuralSource],
   );
 
   const handleToggleSummary = useCallback(() => {
@@ -146,7 +149,7 @@ export default function ContentPage() {
       // Navigate to database view with filter
       router.push(`/database?filter=${encodeURIComponent(name)}`);
     },
-    [router]
+    [router],
   );
 
   // Delete Handler
@@ -193,7 +196,7 @@ export default function ContentPage() {
         console.error("Failed to update content:", error);
       }
     },
-    [currentDetailItem, api]
+    [currentDetailItem, api],
   );
 
   // Handle Tag Removal
@@ -207,11 +210,11 @@ export default function ContentPage() {
       if (newTagsIds.length === 0) {
         // Find "Uncategorized" or "General" tag
         let fallbackTag = Array.from(tagsMap.values()).find(
-          (t: any) => t.tagName.toLowerCase() === "uncategorized"
+          (t: any) => t.tagName.toLowerCase() === "uncategorized",
         );
         if (!fallbackTag) {
           fallbackTag = Array.from(tagsMap.values()).find(
-            (t: any) => t.tagName.toLowerCase() === "general"
+            (t: any) => t.tagName.toLowerCase() === "general",
           );
         }
 
@@ -222,12 +225,11 @@ export default function ContentPage() {
 
       await handleSave({ tagsId: newTagsIds });
     },
-    [currentItem, tagsMap, handleSave]
+    [currentItem, tagsMap, handleSave],
   );
 
   // Search Mode State for Floating Bar
   const [searchMode, setSearchMode] = useState<"DB" | "AI">("DB");
-
 
   return (
     <div className="flex h-screen w-full bg-black overflow-hidden relative">
@@ -240,6 +242,7 @@ export default function ContentPage() {
         onToggleSidebarCat={handleToggleSidebarCat}
         onUpdateView={handleUpdateView}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        activeContentId={id}
       />
 
       {/* Main Content Area */}
@@ -270,7 +273,9 @@ export default function ContentPage() {
             </div>
             <p className="text-lg">Content not found</p>
             <button
-              onClick={() => router.push(isNeuralSource ? "/neural-graph" : "/dashboard")}
+              onClick={() =>
+                router.push(isNeuralSource ? "/neural-graph" : "/dashboard")
+              }
               className="mt-4 text-zinc-400 hover:text-white border border-zinc-700 px-4 py-2 rounded-lg transition-colors"
             >
               Return to {isNeuralSource ? "Neural Graph" : "Dashboard"}
@@ -285,7 +290,9 @@ export default function ContentPage() {
             aiSummaryText={
               aiSummaryText || "AI summary generation not yet connected."
             }
-            onBack={() => router.push(isNeuralSource ? "/neural-graph" : "/database")}
+            onBack={() =>
+              router.push(isNeuralSource ? "/neural-graph" : "/database")
+            }
             onNavigate={handleNavigate}
             onToggleEditing={() => setIsEditing(!isEditing)}
             onToggleSummary={handleToggleSummary}

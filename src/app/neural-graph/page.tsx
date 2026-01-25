@@ -90,12 +90,12 @@ export default function NeuralGraphPage() {
       detailLayerRef.current?.classList.add("push-right");
       containerRef.current?.classList.add("push-right");
     } else {
-      // Only close if we are not focused on a node? 
+      // Only close if we are not focused on a node?
       // Actually, if we are focused, isChatOpen SHOULD be true if the panel is open.
       // So if isChatOpen is false, we strictly close it.
       rightPanelRef.current?.classList.remove("active");
       if (!leftPanelRef.current?.classList.contains("active")) {
-          containerRef.current?.classList.remove("push-right");
+        containerRef.current?.classList.remove("push-right");
       }
       // We might need to be careful about not removing other classes if they are needed
     }
@@ -104,6 +104,7 @@ export default function NeuralGraphPage() {
   // Fetch real data from backend
   const { graphData, loading: graphLoading, isEmpty } = useGraphData();
   const deepData = graphData.deepData;
+  const treeData = graphData.treeData || [];
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -126,48 +127,48 @@ export default function NeuralGraphPage() {
   const toggleGroup = (id: string, forceOpen: boolean = false) => {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
-      const isCategory = id.startsWith("cat-");
-      const isSub = id.startsWith("sub-");
-
-      // If already open and not forcing, just close it
-      if (!forceOpen && next.has(id)) {
-        next.delete(id);
-        // If closing a category, also close its subs
-        if (isCategory) {
-          const catIdx = id.split("-")[1];
-          Array.from(next).forEach((key) => {
-            if (key.startsWith(`sub-${catIdx}-`)) next.delete(key);
-          });
-        }
-        return next;
-      }
-
-      // Opening (or forcing open) -> Close siblings
-      if (isCategory) {
-        // Close all other categories and their subs
-        Array.from(next).forEach((key) => {
-          if (key.startsWith("cat-") || key.startsWith("sub-")) {
-            next.delete(key);
-          }
-        });
+      if (forceOpen) {
         next.add(id);
-      } else if (isSub) {
-        const parts = id.split("-");
-        const catIdx = parts[1];
-
-        // Close other subs in this category
-        Array.from(next).forEach((key) => {
-          if (key.startsWith(`sub-${catIdx}-`) && key !== id) {
-            next.delete(key);
-          }
-        });
-        next.add(id);
-        // Ensure parent is open
-        next.add(`cat-${catIdx}`);
+      } else {
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
       }
-
       return next;
     });
+  };
+
+  // Helper to find path to node in tree
+  const findExpandedPath = (
+    nodes: any[],
+    targetId: string,
+    currentPath: string[] = [],
+    parentId: string = "root",
+  ): string[] | null => {
+    for (const node of nodes) {
+      // ID Logic MUST match usage in LibraryPanel and useGraphData: tagId or parent-name fallback
+      const nodeId = node.tagId || `${parentId}-${node.name}`;
+
+      if (nodeId === targetId) {
+        return currentPath;
+      }
+      if (node.children) {
+        const res = findExpandedPath(
+          node.children,
+          targetId,
+          [...currentPath, nodeId],
+          nodeId,
+        );
+        if (res) return res;
+      }
+      if (node.items) {
+        const foundItem = node.items.find((item: any) => {
+          const itemId = `content-${item.id}`;
+          return itemId === targetId || item.id === targetId;
+        });
+        if (foundItem) return [...currentPath, nodeId];
+      }
+    }
+    return null;
   };
 
   // --- PANEL TOGGLE FUNCTIONS ---
@@ -208,9 +209,17 @@ export default function NeuralGraphPage() {
 
     renderMiniGraph(node);
 
-    if (node.type === "category") {
-      const idx = deepData.findIndex((c) => c.name === node.label);
-      if (idx >= 0) toggleGroup(`cat-${idx}`, true);
+    // Auto-expand sidebar
+    if (treeData && treeData.length > 0) {
+      // node.id matches tagId in our construction
+      const path = findExpandedPath(treeData, node.id.toString());
+      if (path) {
+        setExpandedGroups((prev) => {
+          const next = new Set(prev);
+          path.forEach((p) => next.add(p));
+          return next;
+        });
+      }
     }
   };
 
@@ -220,7 +229,7 @@ export default function NeuralGraphPage() {
 
   const handleChatSubmit = async (
     text: string,
-    source: "floating" | "sidebar"
+    source: "floating" | "sidebar",
   ) => {
     if (!text.trim()) return;
 
@@ -231,7 +240,7 @@ export default function NeuralGraphPage() {
       // Search for node
       const searchTerm = text.toLowerCase();
       const foundNode = nodesRef.current.find(
-        (n) => n.label?.toLowerCase() === searchTerm
+        (n) => n.label?.toLowerCase() === searchTerm,
       );
 
       if (foundNode) {
@@ -301,7 +310,7 @@ export default function NeuralGraphPage() {
       // Find adjacent tags (siblings)
       const catName = centerNode.label;
       const catIndex = deepData.findIndex(
-        (c: { name: string }) => c.name === catName
+        (c: { name: string }) => c.name === catName,
       );
       const prevCat = deepData[catIndex - 1]?.name;
       const nextCat = deepData[catIndex + 1]?.name;
@@ -322,7 +331,7 @@ export default function NeuralGraphPage() {
 
       const line = document.createElementNS(
         "http://www.w3.org/2000/svg",
-        "line"
+        "line",
       );
       line.setAttribute("x1", cx.toString());
       line.setAttribute("y1", cy.toString());
@@ -334,7 +343,7 @@ export default function NeuralGraphPage() {
 
       const circle = document.createElementNS(
         "http://www.w3.org/2000/svg",
-        "circle"
+        "circle",
       );
       circle.setAttribute("cx", x2.toString());
       circle.setAttribute("cy", y2.toString());
@@ -344,7 +353,7 @@ export default function NeuralGraphPage() {
 
       const text = document.createElementNS(
         "http://www.w3.org/2000/svg",
-        "text"
+        "text",
       );
       text.setAttribute("x", x2.toString());
       text.setAttribute("y", (y2 + 14).toString());
@@ -358,11 +367,11 @@ export default function NeuralGraphPage() {
     // Center node with pulse
     const centerGroup = document.createElementNS(
       "http://www.w3.org/2000/svg",
-      "g"
+      "g",
     );
     const centerCircle = document.createElementNS(
       "http://www.w3.org/2000/svg",
-      "circle"
+      "circle",
     );
     centerCircle.setAttribute("cx", cx.toString());
     centerCircle.setAttribute("cy", cy.toString());
@@ -372,7 +381,7 @@ export default function NeuralGraphPage() {
 
     const centerText = document.createElementNS(
       "http://www.w3.org/2000/svg",
-      "text"
+      "text",
     );
     centerText.setAttribute("x", cx.toString());
     centerText.setAttribute("y", (cy + 4).toString());
@@ -451,25 +460,25 @@ export default function NeuralGraphPage() {
       const visibleNodes = nodesRef.current.filter((n) => {
         // Always show dust particles
         if (n.type === "dust") return true;
-        
+
         // When no selection, show root and categories
         if (!selectedNodeRef.current) {
           return n.type === "root" || n.type === "category";
         }
-        
+
         const selected = selectedNodeRef.current;
-        
+
         // When a category is selected: show root (parent), the category, its subs, and their content
         if (selected.type === "category") {
           if (n.type === "root") return true; // Show root for back navigation
           if (n.id === selected.id) return true; // The selected category
           if (n.parent === selected.id) return true; // Its children (subs)
           // Content under subs of this category
-          const parentNode = nodesRef.current.find(p => p.id === n.parent);
+          const parentNode = nodesRef.current.find((p) => p.id === n.parent);
           if (parentNode && parentNode.parent === selected.id) return true;
           return false;
         }
-        
+
         // When a sub is selected: show parent category, the sub, and its content
         if (selected.type === "sub") {
           if (n.id === selected.parent) return true; // Parent category for back navigation
@@ -477,12 +486,12 @@ export default function NeuralGraphPage() {
           if (n.parent === selected.id) return true; // Its content
           return false;
         }
-        
+
         // When content is selected (shouldn't happen as we navigate away)
         if (n.id === selected.parent) return true; // Parent for back nav
         if (n.id === selected.id) return true;
         if (n.parent === selected.id) return true;
-        
+
         return false;
       });
 
@@ -561,7 +570,7 @@ export default function NeuralGraphPage() {
             const fontSize = p.type === "category" ? 12 : 10;
             ctx.font = `${p.type === "category" ? 600 : 400} ${Math.max(
               9,
-              fontSize * p.scale
+              fontSize * p.scale,
             )}px Inter`;
             ctx.textAlign = "center";
             ctx.fillText(p.label, p.px, p.py - p.radius * p.scale - 6);
@@ -764,12 +773,12 @@ export default function NeuralGraphPage() {
         // Single touch: Rotate/Drag
         const t = e.touches[0];
         lastMouseRef.current = { x: t.clientX, y: t.clientY };
-        
+
         // Check for node tap
         const rect = canvas.getBoundingClientRect();
         const node = getNodeAt(t.clientX - rect.left, t.clientY - rect.top);
         if (!node) {
-            isDraggingRef.current = true;
+          isDraggingRef.current = true;
         }
       }
     };
@@ -781,18 +790,20 @@ export default function NeuralGraphPage() {
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        
+
         const delta = dist - touchRef.current.dist;
         zoomRef.current += delta * 0.005; // Adjust sensitivity
         zoomRef.current = Math.max(0.5, Math.min(2.5, zoomRef.current));
-        
+
         touchRef.current.dist = dist;
       } else if (e.touches.length === 1 && isDraggingRef.current) {
         // Rotate
         e.preventDefault(); // Prevent scroll
         const t = e.touches[0];
-        targetRotationRef.current.y += (t.clientX - lastMouseRef.current.x) * 0.005;
-        targetRotationRef.current.x += (t.clientY - lastMouseRef.current.y) * 0.005;
+        targetRotationRef.current.y +=
+          (t.clientX - lastMouseRef.current.x) * 0.005;
+        targetRotationRef.current.x +=
+          (t.clientY - lastMouseRef.current.y) * 0.005;
         lastMouseRef.current = { x: t.clientX, y: t.clientY };
       }
     };
@@ -806,7 +817,7 @@ export default function NeuralGraphPage() {
     canvas.addEventListener("mousemove", handleMouseMove);
     canvas.addEventListener("mouseup", handleMouseUp);
     canvas.addEventListener("wheel", handleWheel, { passive: false });
-    
+
     // Add Touch Listeners
     canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
     canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
@@ -821,7 +832,7 @@ export default function NeuralGraphPage() {
       canvas.removeEventListener("mousemove", handleMouseMove);
       canvas.removeEventListener("mouseup", handleMouseUp);
       canvas.removeEventListener("wheel", handleWheel);
-      
+
       canvas.removeEventListener("touchstart", handleTouchStart);
       canvas.removeEventListener("touchmove", handleTouchMove);
       canvas.removeEventListener("touchend", handleTouchEnd);
@@ -852,6 +863,7 @@ export default function NeuralGraphPage() {
         <LibraryPanel
           leftPanelRef={leftPanelRef}
           deepData={deepData}
+          treeData={treeData}
           expandedGroups={expandedGroups}
           selectedNode={selectedNode}
           nodesRef={nodesRef}

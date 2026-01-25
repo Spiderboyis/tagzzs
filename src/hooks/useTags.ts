@@ -248,3 +248,28 @@ export function useTags(options: UseTagsOptions = {}): UseTagsReturn {
 }
 
 export default useTags;
+/**
+ * Helper to rebuild the lineage of a tag (Breadcrumbs)
+ * Returns array of tag names: [Root, Child, Grandchild...]
+ */
+export function getTagLineage(tagId: string, tagsMap: Map<string, Tag>): string[] {
+    const lineage: string[] = [];
+    let currentId: string | null = tagId;
+    const visited = new Set<string>();
+
+    while (currentId && !visited.has(currentId)) {
+        visited.add(currentId);
+        const tag = tagsMap.get(currentId);
+        if (tag) {
+            lineage.unshift(tag.tagName);
+            currentId = tag.parentId;
+        } else {
+            // Tag not found in map, stop
+            // Possibly try to resolve by name if ID was actually a name (legacy issues)
+            // But strict ID lookup is safer.
+            currentId = null;
+        }
+    }
+    
+    return lineage;
+}
