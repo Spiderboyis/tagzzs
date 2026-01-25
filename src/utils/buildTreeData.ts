@@ -7,36 +7,27 @@ import { TagNode } from '@/hooks/useTags';
  * - Child tags become subcategories
  * - Content items are placed under the tag they belong to
  */
+/**
+ * Recursive TreeNode structure.
+ * Each node can have children (sub-tags) and items (content).
+ */
 export interface TreeNode {
   name: string;
   tagId?: string;
   tagColor?: string;
-  children: TreeSubNode[];
-}
-
-export interface TreeSubNode {
-  name: string;
-  tagId?: string;
-  tagColor?: string;
+  children: TreeNode[];
   items: ContentItem[];
 }
 
 /**
- * Build tree structure from hierarchical tags and content.
- * 
- * Structure:
- * - Parent tags (no parent_id) → top-level columns
- * - Child tags → subcategories under their parent
- * - Content is linked to tags via tagsId[]
- * - "Uncategorized" column for content without tags
+ * Build recursive tree structure from hierarchical tags and content.
  */
 export function buildTreeData(
   tagTree: TagNode[],
   content: ContentItem[],
   tagsMap: Map<string, { id: string; tagName: string; parentId: string | null }>
 ): TreeNode[] {
-  const result: TreeNode[] = [];
-
+  
   // Create a map of tagId -> content items
   const tagContentMap = new Map<string, ContentItem[]>();
   const usedContentIds = new Set<string>();
@@ -54,92 +45,76 @@ export function buildTreeData(
     }
   });
 
-  // Build tree from parent tags
-  tagTree.forEach((parentTag) => {
-    const children: TreeSubNode[] = [];
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-    // Check if parent tag name is UUID and resolve
-    let parentName = parentTag.tagName;
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    
-    if (uuidRegex.test(parentName)) {
-        const resolved = tagsMap.get(parentName);
-        if (resolved) parentName = resolved.tagName;
+  // Recursive function to build nodes
+  function buildNode(tag: TagNode): TreeNode {
+    // Resolve name if UUID
+    let uiName = tag.tagName;
+    if (uuidRegex.test(uiName)) {
+        const resolved = tagsMap.get(uiName);
+        if (resolved) uiName = resolved.tagName;
     }
 
-    // Check if parent tag has direct content
-    const parentContent = tagContentMap.get(parentTag.id) || [];
+    // Get direct content
+    const directItems = tagContentMap.get(tag.id) || [];
 
-    // If parent has child tags, make them subcategories
-    if (parentTag.children && parentTag.children.length > 0) {
-      parentTag.children.forEach((childTag) => {
-        const childContent = tagContentMap.get(childTag.id) || [];
-        
-        let childName = childTag.tagName;
-        if (uuidRegex.test(childName)) {
-             const resolved = tagsMap.get(childName);
-             if (resolved) childName = resolved.tagName;
-        }
-
-        children.push({
-          name: childName,
-          tagId: childTag.id,
-          tagColor: childTag.tagColor,
-          items: childContent,
+    // Recursively build children
+    const childNodes: TreeNode[] = [];
+    if (tag.children && tag.children.length > 0) {
+        tag.children.forEach(childTag => {
+            childNodes.push(buildNode(childTag));
         });
-      });
-
-      // If parent has direct content, add as "General" subcategory
-      if (parentContent.length > 0) {
-        children.unshift({
-          name: 'General',
-          tagId: parentTag.id,
-          tagColor: parentTag.tagColor,
-          items: parentContent,
-        });
-      }
-    } else {
-      // No child tags, put all content directly (empty name hides subcategory label)
-      if (parentContent.length > 0) {
-        children.push({
-          name: '', // Empty name = show items directly without subcategory header
-          tagId: parentTag.id,
-          tagColor: parentTag.tagColor,
-          items: parentContent,
-        });
-      }
     }
 
-    // Only add to result if there are children with content
-    if (children.length > 0) {
-      result.push({
-        name: parentName,
-        tagId: parentTag.id,
-        tagColor: parentTag.tagColor,
-        children,
-      });
-    }
+    return {
+        name: uiName,
+        tagId: tag.id,
+        tagColor: tag.tagColor,
+        children: childNodes,
+        items: directItems
+    };
+  }
+
+  // Build roots
+  const result: TreeNode[] = [];
+  tagTree.forEach(rootTag => {
+      const node = buildNode(rootTag);
+      // Only include if node or its children have content (or always include? existing logic implied checking)
+      // For now, let's include all tags to ensure hierarchy visibility (or filter empty ones if preferred)
+      // The original code tried to be smart about "General" vs subcategories.
+      // With full recursion, we just show the structure as is.
+      result.push(node);
   });
 
-  // Add Uncategorized column for content without tags
+  // Filter out empty branches if desired, or keep them to show structure.
+  // Original logic: "Only add to result if there are children with content or direct content"
+  // Let's implement a cleaner filter: Keep node if it has items OR if any child is kept.
+
+  function pruneEmptyNodes(nodes: TreeNode[]): TreeNode[] {
+      return nodes.filter(node => {
+          node.children = pruneEmptyNodes(node.children);
+          return node.items.length > 0 || node.children.length > 0;
+      });
+  }
+
+  const prunedResult = pruneEmptyNodes(result);
+
+  // Add Uncategorized
   const uncategorizedContent = content.filter(
     (item) => !item.tagsId || item.tagsId.length === 0
   );
 
   if (uncategorizedContent.length > 0) {
-    result.push({
+    prunedResult.push({
       name: 'Uncategorized',
       tagColor: '#808080',
-      children: [
-        {
-          name: '', // Empty name = show items directly
-          items: uncategorizedContent,
-        },
-      ],
+      children: [],
+      items: uncategorizedContent,
     });
   }
 
-  return result;
+  return prunedResult;
 }
 
 /**

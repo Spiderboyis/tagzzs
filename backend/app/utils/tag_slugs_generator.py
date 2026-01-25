@@ -21,7 +21,7 @@ def generate_tag_slug(tag_name: str) -> str:
         return ""
 
     slug = tag_name.lower().strip()
-    slug = re.sub(r"\.", "-", slug)
+    slug = re.sub(r"[\._]", "-", slug)
     slug = re.sub(r"[^\w\s-]", "", slug)
     slug = re.sub(r"\s+", "-", slug)
     slug = re.sub(r"-+", "-", slug)

@@ -27,8 +27,10 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import dynamic from "next/dynamic"; // Use dynamic import for client-side only editor
 
-const BlockNoteEditor = dynamic(() => import("@/components/notes/BlockNoteEditor"), { ssr: false });
-
+const BlockNoteEditor = dynamic(
+  () => import("@/components/notes/BlockNoteEditor"),
+  { ssr: false },
+);
 
 interface DetailViewProps {
   currentDetailItem: any;
@@ -41,7 +43,11 @@ interface DetailViewProps {
   onToggleEditing: () => void;
   onToggleSummary: () => void;
   onDelete?: () => void;
-  onSave?: (updates: { personalNotes?: string; description?: string; personalNotesBlocks?: any[] }) => void;
+  onSave?: (updates: {
+    personalNotes?: string;
+    description?: string;
+    personalNotesBlocks?: any[];
+  }) => void;
   onRemoveTag?: (tagId: string) => void;
 }
 
@@ -63,7 +69,7 @@ export default function DetailView({
   const siblings = allItems.filter(
     (i) =>
       i.category === currentDetailItem.category &&
-      i.subCategory === currentDetailItem.subCategory
+      i.subCategory === currentDetailItem.subCategory,
   );
   const currentIndex = siblings.findIndex((i) => i.id === currentDetailItem.id);
 
@@ -71,7 +77,7 @@ export default function DetailView({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewSrc, setPreviewSrc] = useState("");
   const [previewType, setPreviewType] = useState<"image" | "video" | "file">(
-    "image"
+    "image",
   );
 
   // AI Summary edit state
@@ -145,7 +151,7 @@ export default function DetailView({
           <div className="flex items-center justify-between sticky top-0 bg-black/95 backdrop-blur py-4 z-20 border-b border-zinc-900">
             <button
               onClick={onBack}
-              className="text-zinc-500 hover:text-white flex items-center gap-2 transition-colors text-xs font-bold uppercase tracking-wider group"
+              className="text-zinc-500 hover:text-white flex items-center gap-2 transition-colors text-xs font-bold uppercase tracking-wider group cursor-pointer"
             >
               <CaretLeft
                 weight="bold"
@@ -157,7 +163,7 @@ export default function DetailView({
             <div className="flex items-center gap-3 bg-zinc-900/50 rounded-lg p-1 border border-zinc-800">
               <button
                 onClick={() => onNavigate(-1)}
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
               >
                 <CaretLeft weight="bold" />
               </button>
@@ -166,7 +172,7 @@ export default function DetailView({
               </span>
               <button
                 onClick={() => onNavigate(1)}
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                className="w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
               >
                 <CaretRight weight="bold" />
               </button>
@@ -191,7 +197,7 @@ export default function DetailView({
                 currentDetailItem._original?.link ||
                   currentDetailItem._original?.url ||
                   currentDetailItem._original?.sourceUrl ||
-                  currentDetailItem.image
+                  currentDetailItem.image,
               )
             }
           >
@@ -336,7 +342,7 @@ export default function DetailView({
                     currentDetailItem._original?.link ||
                       currentDetailItem._original?.url ||
                       currentDetailItem._original?.sourceUrl ||
-                      "https://tagzzs.com"
+                      "https://tagzzs.com",
                   ).hostname.replace("www.", "")}
                 </span>
               </div>
@@ -403,7 +409,7 @@ export default function DetailView({
               onClick={() => setIsNotesOpen(!isNotesOpen)}
               className={`bg-[#121212] hover:bg-zinc-800 border ${
                 isNotesOpen ? "border-zinc-500 bg-zinc-800" : "border-zinc-800"
-              } rounded-xl flex flex-col items-center justify-center gap-2 transition group hover:border-zinc-700`}
+              } rounded-xl flex flex-col items-center justify-center gap-2 transition group hover:border-zinc-700 cursor-pointer`}
             >
               <FileText
                 weight="bold"
@@ -427,7 +433,7 @@ export default function DetailView({
                   className: "bg-zinc-950 border-zinc-800 text-white",
                 })
               }
-              className="bg-[#121212] hover:bg-zinc-800 border border-zinc-800 rounded-xl flex flex-col items-center justify-center gap-2 transition group hover:border-zinc-700"
+              className="bg-[#121212] hover:bg-zinc-800 border border-zinc-800 rounded-xl flex flex-col items-center justify-center gap-2 transition group hover:border-zinc-700 cursor-pointer"
             >
               <Cards
                 weight="bold"
@@ -445,7 +451,7 @@ export default function DetailView({
                   className: "bg-zinc-950 border-zinc-800 text-white",
                 })
               }
-              className="bg-[#121212] hover:bg-zinc-800 border border-zinc-800 rounded-xl flex flex-col items-center justify-center gap-2 transition group hover:border-zinc-700"
+              className="bg-[#121212] hover:bg-zinc-800 border border-zinc-800 rounded-xl flex flex-col items-center justify-center gap-2 transition group hover:border-zinc-700 cursor-pointer"
             >
               <Bell
                 weight="bold"
@@ -463,7 +469,7 @@ export default function DetailView({
                   className: "bg-zinc-950 border-zinc-800 text-white",
                 })
               }
-              className="bg-white hover:bg-zinc-200 text-black border border-white rounded-xl flex flex-col items-center justify-center gap-2 transition shadow-lg shadow-white/5"
+              className="bg-white hover:bg-zinc-200 text-black border border-white rounded-xl flex flex-col items-center justify-center gap-2 transition shadow-lg shadow-white/5 cursor-pointer"
             >
               <Lightning weight="bold" className="text-2xl" />
               <span className="text-xs font-bold">CTA</span>
@@ -485,7 +491,11 @@ export default function DetailView({
                   onClick={() => {
                     if (isEditing) {
                       // We save blocks now. If onSave supports blocks, use it.
-                      if (onSave) onSave({ personalNotesBlocks: notesBlocks, personalNotes: notesContent });
+                      if (onSave)
+                        onSave({
+                          personalNotesBlocks: notesBlocks,
+                          personalNotes: notesContent,
+                        });
                     }
                     onToggleEditing();
                   }}
@@ -493,7 +503,9 @@ export default function DetailView({
                   {isEditing ? "Save" : "Edit"}
                 </button>
               </div>
-              {!isEditing && (!notesContent && (!notesBlocks || notesBlocks.length === 0)) ? (
+              {!isEditing &&
+              !notesContent &&
+              (!notesBlocks || notesBlocks.length === 0) ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 gap-2 p-8">
                   <FileText weight="duotone" className="text-4xl opacity-20" />
                   <p className="text-sm">
@@ -502,15 +514,23 @@ export default function DetailView({
                 </div>
               ) : (
                 <div className="flex-1 bg-transparent min-h-[300px]">
-                 <BlockNoteEditor
-                    initialContent={notesBlocks && notesBlocks.length > 0 ? notesBlocks : undefined}
-                    initialContentHTML={(!notesBlocks || notesBlocks.length === 0) ? notesContent : undefined}
+                  <BlockNoteEditor
+                    initialContent={
+                      notesBlocks && notesBlocks.length > 0
+                        ? notesBlocks
+                        : undefined
+                    }
+                    initialContentHTML={
+                      !notesBlocks || notesBlocks.length === 0
+                        ? notesContent
+                        : undefined
+                    }
                     isEditing={isEditing}
                     onChange={(blocks, text) => {
                       setNotesBlocks(blocks);
                       setNotesContent(text);
                     }}
-                 />
+                  />
                 </div>
               )}
             </div>
@@ -603,7 +623,7 @@ export default function DetailView({
               <div className="grid grid-cols-2 gap-3 mt-2">
                 <button
                   onClick={() => setDeleteConfirmOpen(false)}
-                  className="py-2.5 rounded-lg border border-zinc-700 text-zinc-300 font-medium text-sm hover:bg-zinc-800 transition-colors"
+                  className="py-2.5 rounded-lg border border-zinc-700 text-zinc-300 font-medium text-sm hover:bg-zinc-800 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -612,7 +632,7 @@ export default function DetailView({
                     setDeleteConfirmOpen(false);
                     if (onDelete) onDelete();
                   }}
-                  className="py-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium text-sm transition-colors shadow-lg shadow-red-500/20"
+                  className="py-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium text-sm transition-colors shadow-lg shadow-red-500/20 cursor-pointer"
                 >
                   Delete
                 </button>

@@ -209,16 +209,18 @@ class RefinementPipeline:
                         response.tags = [
                             {
                                 "name": tag.name,
-                                "parent": tag.parent_name,
+                                "parent": tag.parent,
                                 "score": tag.score,
-                                "type": tag.type
+                                "level": tag.level,
                             }
                             for tag in tag_response.tags
                         ]
                         response.processing_times_ms["tagging"] = (
                             tag_response.processing_time_ms
                         )
-                        self.logger.info(f"✅ Tag generation complete: {len(response.tags)} tags")
+                        self.logger.info(
+                            f"✅ Tag generation complete: {len(response.tags)} tags"
+                        )
                     else:
                         self.logger.warning(
                             f"⚠️ Tag generation failed: {tag_response.errors}"

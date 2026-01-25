@@ -205,10 +205,11 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
         if (result) {
           const content = result.content || {};
           const metadata = result.metadata || {};
+
           setPreviewData({
             title: content.title || metadata.title || "Untitled",
             description: content.summary || content.description || "", // Prefer AI summary for description
-            tags: (content.tags || []), // Keep full tag objects for hierarchy
+            tags: content.tags || [], // Keep full tag objects for hierarchy
             summary: "", // Legacy field removed from UI
             personalNotes: "",
             source: new URL(trimmedUrl).hostname,
@@ -243,7 +244,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
           setPreviewData({
             title: content.title || selectedFile.name || "Untitled",
             description: content.summary || content.description || "", // Prefer AI summary
-            tags: (content.tags || []), // Keep full tag objects
+            tags: content.tags || [], // Keep full tag objects
             summary: "",
             personalNotes: "",
             source: "Document",
@@ -331,8 +332,38 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
       const BACKEND_URL =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
-      const tagsId = previewData.tags.map((t: any) => typeof t === 'string' ? t : t.name);
-      const tagsData = previewData.tags.filter((t: any) => typeof t !== 'string');
+      const sortedTags = getSortedTags();
+
+      // Sanitize Parents: Enforce strict linear chain (R -> H -> D) based on visual order/levels
+      // This fixes issues where 'parent' might be stale or incorrect
+      const sanitizedTagsData = sortedTags.map((tag, index) => {
+        const name = typeof tag === "string" ? tag : tag.name;
+        // IMPORTANT strict parent enforcement: Parent is always the tag at index-1
+        const parent =
+          index > 0
+            ? typeof sortedTags[index - 1] === "string"
+              ? sortedTags[index - 1]
+              : sortedTags[index - 1].name
+            : null;
+
+        return {
+          name,
+          level: index,
+          parent,
+        };
+      });
+
+      // Get the leaf tag (last one in sorted list)
+      const leafTag =
+        sanitizedTagsData.length > 0
+          ? sanitizedTagsData[sanitizedTagsData.length - 1]
+          : null;
+
+      // tagsId should only contain the leaf tag
+      const tagsId = leafTag ? [leafTag.name] : [];
+
+      // tagsData sends the full hierarchical chain
+      const tagsData = sanitizedTagsData;
 
       const payload = {
         link: urlInput || "ideation://local",
@@ -354,6 +385,10 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
         summary: "", // No longer sending separate summary
       };
 
+      console.log("--- DEBUG: Save Payload ---", payload);
+      console.log("--- DEBUG: Tags ID ---", tagsId);
+      console.log("--- DEBUG: Tags Data ---", tagsData);
+
       const response = await fetch(
         `${BACKEND_URL}/api/user-database/content/add`,
         {
@@ -363,7 +398,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
           },
           credentials: "include",
           body: JSON.stringify(payload),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -420,8 +455,8 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
   const toggleTodoItem = (index: number) => {
     setTodoItems(
       todoItems.map((item, i) =>
-        i === index ? { ...item, completed: !item.completed } : item
-      )
+        i === index ? { ...item, completed: !item.completed } : item,
+      ),
     );
   };
 
@@ -430,8 +465,8 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
     if (!tag) return;
 
     // Check if tag already exists (check name property if object)
-    const exists = previewData.tags.some(t => {
-      const tName = typeof t === 'string' ? t : t.name;
+    const exists = previewData.tags.some((t) => {
+      const tName = typeof t === "string" ? t : t.name;
       return tName.toLowerCase() === tag.toLowerCase();
     });
 
@@ -457,10 +492,10 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
       .filter(
         (tag) =>
           tag.tagName.toLowerCase().includes(value.toLowerCase()) &&
-          !previewData.tags.some(t => {
-            const tName = typeof t === 'string' ? t : t.name;
+          !previewData.tags.some((t) => {
+            const tName = typeof t === "string" ? t : t.name;
             return tName === tag.tagName;
-          })
+          }),
       )
       .slice(0, 5); // Limit to 5 suggestions
 
@@ -469,11 +504,12 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
   };
 
   const removeTag = (tagToRemove: string | any) => {
-    const nameToRemove = typeof tagToRemove === 'string' ? tagToRemove : tagToRemove.name;
+    const nameToRemove =
+      typeof tagToRemove === "string" ? tagToRemove : tagToRemove.name;
     setPreviewData({
       ...previewData,
       tags: previewData.tags.filter((tag) => {
-        const tName = typeof tag === 'string' ? tag : tag.name;
+        const tName = typeof tag === "string" ? tag : tag.name;
         return tName !== nameToRemove;
       }),
     });
@@ -501,31 +537,21 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
     setTodoTags(todoTags.filter((tag) => tag !== tagToRemove));
   };
 
-  // Helper: Sort tags by hierarchy (parent first, then children)
+  // Helper: Sort tags by hierarchy level (0 -> 1 -> 2)
   const getSortedTags = () => {
     const tags = previewData.tags;
     if (!tags.length) return [];
-    
-    // Separate parent and children
-    const parent = tags.find((t: any) => 
-      typeof t !== 'string' && (t.type === 'parent' || !t.parent)
-    );
-    const children = tags.filter((t: any) => 
-      typeof t !== 'string' && t.type === 'child' && t.parent
-    );
-    const stringTags = tags.filter((t: any) => typeof t === 'string');
-    
-    // Parent first, then children, then any plain strings
-    const result: any[] = [];
-    if (parent) result.push(parent);
-    result.push(...children);
-    result.push(...stringTags);
-    
-    return result.length ? result : tags;
+
+    // Sort by level ascending
+    return [...tags].sort((a, b) => {
+      const levelA = typeof a === "object" ? (a.level ?? 0) : 0;
+      const levelB = typeof b === "object" ? (b.level ?? 0) : 0;
+      return levelA - levelB;
+    });
   };
 
   // Helper: Get tag display name
-  const getTagName = (tag: any) => typeof tag === 'string' ? tag : tag.name;
+  const getTagName = (tag: any) => (typeof tag === "string" ? tag : tag.name);
 
   // Helper: Get parent tag name (first tag or explicit parent type)
   const getParentTagName = () => {
@@ -539,22 +565,29 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
   const addChildTag = () => {
     const name = newChildTagName.trim();
     if (!name) return;
-    
+
     const parentName = getParentTagName();
-    const exists = previewData.tags.some(t => getTagName(t).toLowerCase() === name.toLowerCase());
-    
+    const exists = previewData.tags.some(
+      (t) => getTagName(t).toLowerCase() === name.toLowerCase(),
+    );
+
     if (!exists) {
+      const sorted = getSortedTags();
+      const lastTag = sorted[sorted.length - 1];
+      const lastLevel = typeof lastTag === "object" ? (lastTag.level ?? 0) : 0;
+      const parentName = typeof lastTag === "object" ? lastTag.name : lastTag;
+
       const newTag = {
         name,
-        type: 'child',
-        parent: parentName,
+        level: lastLevel + 1,
+        parent: sorted.length > 0 ? parentName : null,
       };
       setPreviewData({
         ...previewData,
         tags: [...previewData.tags, newTag],
       });
     }
-    
+
     setNewChildTagName("");
     setIsAddingChildTag(false);
   };
@@ -562,17 +595,25 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
   // Handle tag reorder
   const handleTagReorder = (newOrder: any[]) => {
     if (!newOrder.length) return;
-    
-    // First tag becomes parent, rest become children
-    const parentName = getTagName(newOrder[0]);
+
+    // Re-assign levels based on new order
     const updatedTags = newOrder.map((tag, index) => {
-      const name = getTagName(tag);
-      if (index === 0) {
-        return { name, type: 'parent', parent: null };
-      }
-      return { name, type: 'child', parent: parentName };
+      const name = typeof tag === "string" ? tag : tag.name;
+      // Previous tag is parent (if index > 0)
+      const parentName =
+        index > 0
+          ? typeof newOrder[index - 1] === "string"
+            ? newOrder[index - 1]
+            : newOrder[index - 1].name
+          : null;
+
+      return {
+        name,
+        level: index,
+        parent: parentName,
+      };
     });
-    
+
     setPreviewData({
       ...previewData,
       tags: updatedTags,
@@ -611,7 +652,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="absolute inset-0 bg-black/60 backdrop-blur-[24px]"
+            className="absolute inset-0 bg-black/60 backdrop-blur-xl"
             onClick={onClose}
             style={{
               backgroundColor: "rgba(0,0,0,0.85)",
@@ -624,14 +665,14 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.96, opacity: 0 }}
             transition={transitions.modal}
-            className="relative w-full max-w-[700px] max-h-[85vh] overflow-hidden rounded-[20px] bg-[#0a0a0a]/95 backdrop-blur-xl border border-white/[0.06] flex flex-col"
+            className="relative w-full max-w-[700px] max-h-[85vh] overflow-hidden rounded-[20px] bg-[#0a0a0a]/95 backdrop-blur-xl border border-white/6 flex flex-col"
             onClick={(e) => e.stopPropagation()}
             style={{
               boxShadow: "0 24px 48px rgba(0,0,0,0.75)",
             }}
           >
             {/* Header */}
-            <div className="px-8 pt-7 pb-5 border-b border-white/[0.06]">
+            <div className="px-8 pt-7 pb-5 border-b border-white/6">
               <div className="flex items-start justify-between mb-1">
                 <div>
                   <h2 className="text-xl font-semibold text-white">
@@ -647,7 +688,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={onClose}
-                    className="p-2 rounded-xl transition-all hover:bg-white/[0.06] text-white/45 hover:text-white"
+                    className="p-2 rounded-xl transition-all hover:bg-white/6 text-white/45 hover:text-white"
                   >
                     <X className="w-5 h-5" />
                   </motion.button>
@@ -656,7 +697,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
             </div>
 
             {/* Tabs */}
-            <div className="px-8 border-b border-white/[0.06]">
+            <div className="px-8 border-b border-white/6">
               <div className="flex gap-8 -mb-px">
                 {tabs.map((tab) => {
                   const Icon = tab.icon;
@@ -668,10 +709,11 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                         setViewState("capture");
                         setSelectedIdeaType(null);
                       }}
-                      className={`relative py-3.5 transition-all duration-200 flex items-center gap-2 ${activeTab === tab.id
-                        ? "text-white"
-                        : "text-white/45 hover:text-white/75"
-                        }`}
+                      className={`relative py-3.5 transition-all duration-200 flex items-center gap-2 cursor-pointer ${
+                        activeTab === tab.id
+                          ? "text-white"
+                          : "text-white/45 hover:text-white/75"
+                      }`}
                       style={{
                         transition: "color 0.2s cubic-bezier(0.2, 0, 0, 1)",
                       }}
@@ -715,7 +757,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                             value={urlInput}
                             onChange={(e) => handleUrlChange(e.target.value)}
                             placeholder="Paste a URL here..."
-                            className="w-full pl-14 pr-5 py-4 rounded-2xl border border-white/[0.06] bg-zinc-900/50 text-white placeholder:text-white/45 transition-all outline-none"
+                            className="w-full pl-14 pr-5 py-4 rounded-2xl border border-white/6 bg-zinc-900/50 text-white placeholder:text-white/45 transition-all outline-none"
                             style={{
                               boxShadow: "none",
                             }}
@@ -817,7 +859,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                         />
 
                         <div
-                          className="rounded-2xl border-2 border-dashed border-white/[0.06] p-16 text-center bg-zinc-900/30 hover:border-white/[0.1] transition-all cursor-pointer"
+                          className="rounded-2xl border-2 border-dashed border-white/6 p-16 text-center bg-zinc-900/30 hover:border-white/10 transition-all cursor-pointer"
                           onClick={() => fileInputRef.current?.click()}
                           onDragOver={(e) => {
                             e.preventDefault();
@@ -866,10 +908,11 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                           whileTap={{ scale: 0.99 }}
                           onClick={handleAnalyze}
                           disabled={!selectedFile || extractionLoading}
-                          className={`w-full py-3.5 rounded-2xl font-medium transition-all flex items-center justify-center gap-2 ${selectedFile && !extractionLoading
-                            ? "bg-white text-black hover:bg-[#EDEDED]"
-                            : "bg-white/25 text-white/50 cursor-not-allowed"
-                            }`}
+                          className={`w-full py-3.5 rounded-2xl font-medium transition-all flex items-center justify-center gap-2 ${
+                            selectedFile && !extractionLoading
+                              ? "bg-white text-black hover:bg-[#EDEDED]"
+                              : "bg-white/25 text-white/50 cursor-not-allowed"
+                          }`}
                         >
                           {extractionLoading ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -926,18 +969,18 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                         e.key === "Enter" && addTodoItem()
                                       }
                                       placeholder="Add a task..."
-                                      className="flex-1 px-4 py-2.5 rounded-xl border border-white/[0.06] bg-[#0B0B0D] text-white placeholder:text-white/45 focus:border-white/[0.12] transition-all outline-none"
+                                      className="flex-1 px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white placeholder:text-white/45 focus:border-white/12 transition-all outline-none"
                                     />
                                     <button
                                       onClick={addTodoItem}
-                                      className="px-4 py-2.5 rounded-xl transition-all bg-white/[0.06] text-white hover:bg-white/[0.1]"
+                                      className="px-4 py-2.5 rounded-xl transition-all bg-white/6 text-white hover:bg-white/10"
                                     >
                                       <Plus className="w-4 h-4" />
                                     </button>
                                   </div>
 
                                   {todoItems.length > 0 && (
-                                    <div className="rounded-xl border border-white/[0.06] bg-[#0B0B0D]/50 p-3 space-y-2">
+                                    <div className="rounded-xl border border-white/6 bg-[#0B0B0D]/50 p-3 space-y-2">
                                       {todoItems.map((item, index) => (
                                         <div
                                           key={index}
@@ -952,10 +995,11 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                             className="w-4 h-4 rounded"
                                           />
                                           <span
-                                            className={`text-sm ${item.completed
-                                              ? "text-white/25 line-through"
-                                              : "text-white/90"
-                                              }`}
+                                            className={`text-sm ${
+                                              item.completed
+                                                ? "text-white/25 line-through"
+                                                : "text-white/90"
+                                            }`}
                                           >
                                             {item.text}
                                           </span>
@@ -980,11 +1024,11 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                           e.key === "Enter" && addTodoTag()
                                         }
                                         placeholder="Add a tag..."
-                                        className="flex-1 px-4 py-2.5 rounded-xl border border-white/[0.06] bg-[#0B0B0D] text-white placeholder:text-white/45 focus:border-white/[0.12] transition-all outline-none"
+                                        className="flex-1 px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white placeholder:text-white/45 focus:border-white/12 transition-all outline-none"
                                       />
                                       <button
                                         onClick={addTodoTag}
-                                        className="p-2.5 rounded-xl transition-all bg-white/[0.06] text-white hover:bg-white/[0.1]"
+                                        className="p-2.5 rounded-xl transition-all bg-white/6 text-white hover:bg-white/10 cursor-pointer"
                                       >
                                         <Plus className="w-4 h-4" />
                                       </button>
@@ -996,12 +1040,12 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                         {todoTags.map((tag) => (
                                           <span
                                             key={tag}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white/90 border border-white/[0.06]"
+                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/90 border border-white/6"
                                           >
                                             {tag}
                                             <button
                                               onClick={() => removeTodoTag(tag)}
-                                              className="p-0.5 rounded-full transition-all hover:bg-white/[0.1]"
+                                              className="p-0.5 rounded-full transition-all hover:bg-white/10"
                                             >
                                               <X className="w-3 h-3" />
                                             </button>
@@ -1029,7 +1073,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                     }
                                     placeholder="What's on your mind?"
                                     rows={5}
-                                    className="w-full px-5 py-4 rounded-2xl border border-white/[0.06] bg-[#0B0B0D] text-white placeholder:text-white/45 focus:border-white/[0.12] transition-all outline-none resize-none"
+                                    className="w-full px-5 py-4 rounded-2xl border border-white/6 bg-[#0B0B0D] text-white placeholder:text-white/45 focus:border-white/12 transition-all outline-none resize-none"
                                   />
 
                                   {/* Tags Section for Ideas */}
@@ -1048,11 +1092,11 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                           e.key === "Enter" && addIdeaTag()
                                         }
                                         placeholder="Add a tag..."
-                                        className="flex-1 px-4 py-2.5 rounded-xl border border-white/[0.06] bg-[#0B0B0D] text-white placeholder:text-white/45 focus:border-white/[0.12] transition-all outline-none"
+                                        className="flex-1 px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white placeholder:text-white/45 focus:border-white/12 transition-all outline-none"
                                       />
                                       <button
                                         onClick={addIdeaTag}
-                                        className="p-2.5 rounded-xl transition-all bg-white/[0.06] text-white hover:bg-white/[0.1]"
+                                        className="p-2.5 rounded-xl transition-all bg-white/6 text-white hover:bg-white/10 cursor-pointer"
                                       >
                                         <Plus className="w-4 h-4" />
                                       </button>
@@ -1064,12 +1108,12 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                         {ideaTags.map((tag) => (
                                           <span
                                             key={tag}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white/90 border border-white/[0.06]"
+                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/90 border border-white/6"
                                           >
                                             {tag}
                                             <button
                                               onClick={() => removeIdeaTag(tag)}
-                                              className="p-0.5 rounded-full transition-all hover:bg-white/[0.1]"
+                                              className="p-0.5 rounded-full transition-all hover:bg-white/10"
                                             >
                                               <X className="w-3 h-3" />
                                             </button>
@@ -1118,11 +1162,11 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                         duration: 2,
                         ease: "easeInOut",
                       }}
-                      className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-white/[0.06] relative overflow-hidden"
+                      className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-white/6 relative overflow-hidden"
                     >
                       {/* AI Shimmer Effect */}
                       <motion.div
-                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+                        className="absolute inset-0 bg-linear-to-r from-transparent via-white/10 to-transparent"
                         style={{
                           background: `linear-gradient(90deg, transparent, ${accentColors.primary[60]}, transparent)`,
                         }}
@@ -1155,7 +1199,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                   >
                     {/* Large Video Preview Card */}
                     <div
-                      className="rounded-2xl border border-white/[0.06] overflow-hidden bg-[#0B0B0D]/50"
+                      className="rounded-2xl border border-white/6 overflow-hidden bg-[#0B0B0D]/50"
                       style={{
                         boxShadow: "0 12px 24px rgba(0,0,0,0.6)",
                       }}
@@ -1201,15 +1245,21 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                               className="flex items-center gap-1 flex-wrap"
                             >
                               {getSortedTags().map((tag, index) => (
-                                <div key={getTagName(tag)} className="flex items-center">
+                                <div
+                                  key={getTagName(tag)}
+                                  className="flex items-center"
+                                >
                                   {/* Arrow before child tags */}
                                   {index > 0 && (
-                                    <ArrowRight className="w-4 h-4 text-white/30 mx-1 flex-shrink-0" />
+                                    <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
                                   )}
                                   <Reorder.Item
                                     value={tag}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white/75 border border-white/[0.06] cursor-grab active:cursor-grabbing hover:bg-white/[0.1] transition-colors"
-                                    whileDrag={{ scale: 1.05, boxShadow: "0 4px 12px rgba(0,0,0,0.4)" }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/75 border border-white/6 cursor-grab active:cursor-grabbing hover:bg-white/10 transition-colors"
+                                    whileDrag={{
+                                      scale: 1.05,
+                                      boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+                                    }}
                                   >
                                     <GripVertical className="w-3 h-3 text-white/30" />
                                     <span>{getTagName(tag)}</span>
@@ -1218,7 +1268,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                         e.stopPropagation();
                                         removeTag(tag);
                                       }}
-                                      className="p-0.5 rounded-full hover:bg-white/[0.15] transition-colors"
+                                      className="p-0.5 rounded-full hover:bg-white/15 transition-colors"
                                     >
                                       <X className="w-3 h-3" />
                                     </button>
@@ -1226,18 +1276,22 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                 </div>
                               ))}
                             </Reorder.Group>
-                            
+
                             {/* Add Button - OUTSIDE Reorder.Group */}
                             {getSortedTags().length > 0 && (
-                              <ArrowRight className="w-4 h-4 text-white/30 mx-1 flex-shrink-0" />
+                              <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
                             )}
                             {isAddingChildTag ? (
                               <div className="flex items-center gap-1">
                                 <input
                                   type="text"
                                   value={newChildTagName}
-                                  onChange={(e) => setNewChildTagName(e.target.value)}
-                                  onKeyPress={(e) => e.key === "Enter" && addChildTag()}
+                                  onChange={(e) =>
+                                    setNewChildTagName(e.target.value)
+                                  }
+                                  onKeyPress={(e) =>
+                                    e.key === "Enter" && addChildTag()
+                                  }
                                   onBlur={() => {
                                     if (!newChildTagName.trim()) {
                                       setIsAddingChildTag(false);
@@ -1245,11 +1299,11 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                   }}
                                   placeholder="New tag..."
                                   autoFocus
-                                  className="px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white placeholder:text-white/45 border border-white/[0.12] outline-none focus:border-[#A78BFA] w-28"
+                                  className="px-3 py-1.5 rounded-full text-sm bg-white/6 text-white placeholder:text-white/45 border border-white/12 outline-none focus:border-[#A78BFA] w-28"
                                 />
                                 <button
                                   onClick={addChildTag}
-                                  className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition-colors"
+                                  className="p-1.5 rounded-full bg-white/6 hover:bg-white/10 transition-colors cursor-pointer"
                                 >
                                   <Plus className="w-3.5 h-3.5 text-white/75" />
                                 </button>
@@ -1257,7 +1311,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                             ) : (
                               <button
                                 onClick={() => setIsAddingChildTag(true)}
-                                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white/60 border border-dashed border-white/[0.12] hover:border-white/[0.25] hover:text-white/80 transition-all"
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/60 border border-dashed border-white/12 hover:border-white/25 hover:text-white/80 transition-all"
                               >
                                 <Plus className="w-3.5 h-3.5" />
                                 <span>Add</span>
@@ -1278,7 +1332,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                     <div>
                       <button
                         onClick={() => setMetadataExpanded(!metadataExpanded)}
-                        className="flex items-center justify-between w-full py-3 px-4 rounded-xl transition-all hover:bg-white/[0.06] text-white/70 hover:text-white"
+                        className="flex items-center justify-between w-full py-3 px-4 rounded-xl transition-all hover:bg-white/6 text-white/70 hover:text-white cursor-pointer"
                       >
                         <span className="text-sm font-medium">
                           Edit details (optional)
@@ -1313,7 +1367,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                       title: e.target.value,
                                     })
                                   }
-                                  className="w-full px-4 py-2.5 rounded-xl border border-white/[0.06] bg-[#0B0B0D] text-white focus:border-white/[0.12] transition-all outline-none"
+                                  className="w-full px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white focus:border-white/12 transition-all outline-none"
                                 />
                               </div>
 
@@ -1330,7 +1384,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                     })
                                   }
                                   rows={3}
-                                  className="w-full px-4 py-2.5 rounded-xl border border-white/[0.06] bg-[#0B0B0D] text-white focus:border-white/[0.12] transition-all outline-none resize-none"
+                                  className="w-full px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white focus:border-white/12 transition-all outline-none resize-none"
                                 />
                               </div>
 
@@ -1347,15 +1401,22 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                     className="flex items-center gap-1 flex-wrap"
                                   >
                                     {getSortedTags().map((tag, index) => (
-                                      <div key={getTagName(tag)} className="flex items-center">
+                                      <div
+                                        key={getTagName(tag)}
+                                        className="flex items-center"
+                                      >
                                         {/* Arrow before child tags */}
                                         {index > 0 && (
-                                          <ArrowRight className="w-4 h-4 text-white/30 mx-1 flex-shrink-0" />
+                                          <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
                                         )}
                                         <Reorder.Item
                                           value={tag}
-                                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white/75 border border-white/[0.06] cursor-grab active:cursor-grabbing hover:bg-white/[0.1] transition-colors"
-                                          whileDrag={{ scale: 1.05, boxShadow: "0 4px 12px rgba(0,0,0,0.4)" }}
+                                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/75 border border-white/6 cursor-grab active:cursor-grabbing hover:bg-white/10 transition-colors"
+                                          whileDrag={{
+                                            scale: 1.05,
+                                            boxShadow:
+                                              "0 4px 12px rgba(0,0,0,0.4)",
+                                          }}
                                         >
                                           <GripVertical className="w-3 h-3 text-white/30" />
                                           <span>{getTagName(tag)}</span>
@@ -1364,7 +1425,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                               e.stopPropagation();
                                               removeTag(tag);
                                             }}
-                                            className="p-0.5 rounded-full hover:bg-white/[0.15] transition-colors"
+                                            className="p-0.5 rounded-full hover:bg-white/15 transition-colors"
                                           >
                                             <X className="w-3 h-3" />
                                           </button>
@@ -1372,18 +1433,22 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                       </div>
                                     ))}
                                   </Reorder.Group>
-                                  
+
                                   {/* Add Button - OUTSIDE Reorder.Group */}
                                   {getSortedTags().length > 0 && (
-                                    <ArrowRight className="w-4 h-4 text-white/30 mx-1 flex-shrink-0" />
+                                    <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
                                   )}
                                   {isAddingChildTag ? (
                                     <div className="flex items-center gap-1">
                                       <input
                                         type="text"
                                         value={newChildTagName}
-                                        onChange={(e) => setNewChildTagName(e.target.value)}
-                                        onKeyPress={(e) => e.key === "Enter" && addChildTag()}
+                                        onChange={(e) =>
+                                          setNewChildTagName(e.target.value)
+                                        }
+                                        onKeyPress={(e) =>
+                                          e.key === "Enter" && addChildTag()
+                                        }
                                         onBlur={() => {
                                           if (!newChildTagName.trim()) {
                                             setIsAddingChildTag(false);
@@ -1391,11 +1456,11 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                         }}
                                         placeholder="New tag..."
                                         autoFocus
-                                        className="px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white placeholder:text-white/45 border border-white/[0.12] outline-none focus:border-[#A78BFA] w-28"
+                                        className="px-3 py-1.5 rounded-full text-sm bg-white/6 text-white placeholder:text-white/45 border border-white/12 outline-none focus:border-[#A78BFA] w-28"
                                       />
                                       <button
                                         onClick={addChildTag}
-                                        className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition-colors"
+                                        className="p-1.5 rounded-full bg-white/6 hover:bg-white/10 transition-colors cursor-pointer"
                                       >
                                         <Plus className="w-3.5 h-3.5 text-white/75" />
                                       </button>
@@ -1403,7 +1468,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                   ) : (
                                     <button
                                       onClick={() => setIsAddingChildTag(true)}
-                                      className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-white/[0.06] text-white/60 border border-dashed border-white/[0.12] hover:border-white/[0.25] hover:text-white/80 transition-all"
+                                      className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/60 border border-dashed border-white/12 hover:border-white/25 hover:text-white/80 transition-all cursor-pointer"
                                     >
                                       <Plus className="w-3.5 h-3.5" />
                                       <span>Add</span>
@@ -1426,7 +1491,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                   }
                                   placeholder="Optional..."
                                   rows={3}
-                                  className="w-full px-4 py-2.5 rounded-xl border border-white/[0.06] bg-[#0B0B0D] text-white placeholder:text-white/45 focus:border-white/[0.12] transition-all outline-none resize-none"
+                                  className="w-full px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white placeholder:text-white/45 focus:border-white/12 transition-all outline-none resize-none"
                                 />
                               </div>
                             </div>
@@ -1440,13 +1505,13 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
             </div>
 
             {/* Footer */}
-            <div className="px-8 py-5 border-t border-white/[0.06] bg-[#141416]/80 backdrop-blur-xl">
+            <div className="px-8 py-5 border-t border-white/6 bg-[#141416]/80 backdrop-blur-xl">
               <div className="flex items-center justify-end gap-3">
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={onClose}
-                  className="px-6 py-2.5 rounded-xl font-medium transition-all text-white/70 hover:text-white hover:bg-white/[0.06]"
+                  className="px-6 py-2.5 rounded-xl font-medium transition-all text-white/70 hover:text-white hover:bg-white/6 cursor-pointer"
                 >
                   Cancel
                 </motion.button>
@@ -1459,12 +1524,13 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                     viewState === "analyzing" ||
                     (activeTab === "ideation" && !selectedIdeaType)
                   }
-                  className={`px-8 py-2.5 rounded-xl font-medium transition-all flex items-center gap-2 ${isLoading ||
+                  className={`px-8 py-2.5 rounded-xl font-medium transition-all flex items-center gap-2 ${
+                    isLoading ||
                     viewState === "analyzing" ||
                     (activeTab === "ideation" && !selectedIdeaType)
-                    ? "bg-white/25 text-white/25 cursor-not-allowed"
-                    : "bg-white text-black hover:bg-[#EDEDED]"
-                    }`}
+                      ? "bg-white/25 text-white/25 cursor-not-allowed"
+                      : "bg-white text-black hover:bg-[#EDEDED] cursor-pointer"
+                  }`}
                   style={{
                     boxShadow: "0 12px 24px rgba(0,0,0,0.6)",
                   }}

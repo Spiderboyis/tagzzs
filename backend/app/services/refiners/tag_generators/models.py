@@ -38,8 +38,9 @@ class Tag(BaseModel):
 
     name: str
     score: float  # Confidence score 0-1
-    parent_name: str | None = None
-    type: str = "child"
+    parent: str | None = None
+    level: int = 1  # 0=Parent/Category, 1=Child/Sub-topic, 2=Grandchild/Detail
+
 
 class TagGenerationResponse(BaseModel):
     """Response model for tag generation via Groq API"""
