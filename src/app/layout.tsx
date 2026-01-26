@@ -6,7 +6,7 @@ import AuthProvider from "../contexts/AuthContext";
 import ChatProvider from "../contexts/ChatContext";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "sonner";
-
+import { Analytics } from '@vercel/analytics/next';
 
 const inter = Inter({
   variable: "--font-inter",
@@ -120,6 +120,7 @@ export default function RootLayout({
             />
           </ChatProvider>
         </AuthProvider>
+        <Analytics />
       </body>
     </html>
   );
