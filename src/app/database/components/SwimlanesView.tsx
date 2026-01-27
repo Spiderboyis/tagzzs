@@ -1,6 +1,5 @@
 import { memo } from "react";
 import { Tag, getTagLineage } from "@/hooks/useTags";
-import { Image as ImageIcon } from "@phosphor-icons/react";
 import { TreeNode } from "@/utils/buildTreeData";
 
 interface SwimlanesViewProps {
@@ -66,24 +65,14 @@ function SwimlanesView({
                   className="min-w-[85vw] sm:min-w-[280px] md:min-w-[320px] w-[85vw] sm:w-[280px] md:w-[320px] h-[360px] bg-[#121212] border border-zinc-800 rounded-3xl p-5 flex flex-col hover:border-zinc-700 hover:shadow-xl transition-all cursor-pointer group snap-start relative overflow-hidden"
                 >
                   <div className="h-48 w-full bg-zinc-900/50 rounded-2xl mb-4 overflow-hidden relative shrink-0 border border-zinc-900 flex items-center justify-center">
-                    {item.thumbnailUrl ? (
-                      <img
-                        src={item.thumbnailUrl}
-                        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700"
-                        alt={item.title}
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = "none";
-                          (
-                            e.target as HTMLImageElement
-                          ).nextElementSibling?.classList.remove("hidden");
-                        }}
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center text-zinc-700 gap-2">
-                        <ImageIcon size={32} />
-                        <span className="text-xs font-medium">No Preview</span>
-                      </div>
-                    )}
+                    <img
+                      src={item.thumbnailUrl || '/default.jpg'}
+                      className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700"
+                      alt={item.title}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/default.jpg';
+                      }}
+                    />
 
                     {/* Fallback for error loading image - hidden by default unless img fails (managed via ref or simple double render strategy, but straightforward conditional is cleaner. If img fails, simple UI handler is hard in react without state. Simple check: if thumbnailUrl exists, try to show it. If we want a robust fallback on error, we need state. For now, strict 'if url exists'.) */}
                   </div>

@@ -36,8 +36,13 @@ function getTagColorFromHex(hexColor: string | undefined): string {
 }
 
 function ActivityCard({ content, tags = [], onClick }: ActivityCardProps) {
-    // Get display image - use thumbnail or fallback
-    const imageUrl = content.thumbnailUrl || `https://picsum.photos/seed/${content.id}/800/600`;
+    // Get display image - use thumbnail or fallback to default
+    const imageUrl = content.thumbnailUrl || '/default.jpg';
+
+    // Handle image load error
+    const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+        e.currentTarget.src = '/default.jpg';
+    };
     
     return (
         <div
@@ -53,6 +58,7 @@ function ActivityCard({ content, tags = [], onClick }: ActivityCardProps) {
                     fill
                     className="object-cover transform group-hover:scale-105 transition-transform duration-500 opacity-90 group-hover:opacity-100"
                     unoptimized
+                    onError={handleImageError}
                 />
             </div>
 

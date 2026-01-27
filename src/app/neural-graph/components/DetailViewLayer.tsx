@@ -47,8 +47,9 @@ export default function DetailViewLayer({
                 <div className="w-full h-80 rounded-2xl overflow-hidden relative shadow-2xl border border-zinc-800 group">
                     <img
                         id="detail-image"
-                        src={selectedNode?.data?.image || "https://picsum.photos/seed/default/800/400"}
+                        src={selectedNode?.data?.image || "/default.jpg"}
                         className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
+                        onError={(e) => { (e.target as HTMLImageElement).src = '/default.jpg'; }}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent"></div>
                     <div className="absolute bottom-6 left-8">

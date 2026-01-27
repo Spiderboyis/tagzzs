@@ -628,7 +628,7 @@ export default function NeuralGraphPage() {
                 desc: n.data.description || "",
                 image:
                   n.data.thumbnailUrl ||
-                  "https://picsum.photos/seed/default/800/400",
+                  "/default.jpg",
                 content: n.data.description || "",
                 contentId: n.data.id,
               }

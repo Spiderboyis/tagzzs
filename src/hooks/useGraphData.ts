@@ -165,7 +165,7 @@ export function useGraphData() {
                    deepItems.push({
                       name: item.title || 'Untitled',
                       desc: item.description || '',
-                      image: item.thumbnailUrl || 'https://picsum.photos/seed/default/800/400',
+                      image: item.thumbnailUrl || '/default.jpg',
                       content: item.description || '',
                       contentId: item.id,
                    });

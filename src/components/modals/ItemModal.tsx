@@ -16,7 +16,12 @@ interface ItemModalProps {
 export default function ItemModal({ isOpen, content, tags = [], onClose }: ItemModalProps) {
     if (!isOpen || !content) return null;
 
-    const imageUrl = content.thumbnailUrl || `public/default.jpg`;
+    const imageUrl = content.thumbnailUrl || '/default.jpg';
+
+    // Handle image load error
+    const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+        e.currentTarget.src = '/default.jpg';
+    };
 
     // Format read time
     const formatReadTime = (minutes: number): string => {
@@ -45,6 +50,7 @@ export default function ItemModal({ isOpen, content, tags = [], onClose }: ItemM
                         fill
                         className="object-cover opacity-90"
                         unoptimized
+                        onError={handleImageError}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#09090b] to-transparent" />
                     <button

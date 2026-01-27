@@ -336,6 +336,32 @@ textarea {
   }
 }
 
+/* Global cursor pointer for all clickable elements */
+button,
+[role="button"],
+a,
+[onclick],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+input[type="checkbox"],
+input[type="radio"],
+select,
+label[for],
+summary,
+[tabindex]:not([tabindex="-1"]),
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Ensure disabled elements show not-allowed cursor */
+button:disabled,
+[disabled],
+.disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 .text-gradient {
   background: linear-gradient(
     to right,
