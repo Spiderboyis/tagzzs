@@ -81,30 +81,35 @@ export default function Dashboard() {
         const currentYear = today.getFullYear();
         const currentMonth = today.getMonth();
 
+        let filtered: typeof content;
+
         // If "All" is selected (current month, current year, no specific day)
         if (selectedDay === null && selectedMonthIdx === currentMonth && selectedYear === currentYear) {
-            return content;
+            filtered = content;
+        } else {
+            // Filter by year, month and optionally by day
+            filtered = content.filter(item => {
+                const itemDate = new Date(item.createdAt);
+                const itemMonth = itemDate.getMonth();
+                const itemYear = itemDate.getFullYear();
+                const itemDay = itemDate.getDate();
+
+                // Match year and month
+                if (itemYear !== selectedYear || itemMonth !== selectedMonthIdx) {
+                    return false;
+                }
+
+                // If specific day is selected, match that too
+                if (selectedDay !== null && itemDay !== selectedDay) {
+                    return false;
+                }
+
+                return true;
+            });
         }
 
-        // Filter by year, month and optionally by day
-        return content.filter(item => {
-            const itemDate = new Date(item.createdAt);
-            const itemMonth = itemDate.getMonth();
-            const itemYear = itemDate.getFullYear();
-            const itemDay = itemDate.getDate();
-
-            // Match year and month
-            if (itemYear !== selectedYear || itemMonth !== selectedMonthIdx) {
-                return false;
-            }
-
-            // If specific day is selected, match that too
-            if (selectedDay !== null && itemDay !== selectedDay) {
-                return false;
-            }
-
-            return true;
-        });
+        // Limit to 9 recently added items
+        return filtered.slice(0, 9);
     }, [content, selectedMonthIdx, selectedDay, selectedYear, isSearching, searchResults]);
 
     // Close all modals on ESC
@@ -322,6 +327,7 @@ export default function Dashboard() {
                             />
 
                             <div className="px-4 md:px-8 lg:px-10 pb-10 flex flex-col gap-6">
+
                                 {/* Show Monthly Breakdown only when NOT searching */}
                                 {!isSearching && (
                                     <MonthlyBreakdown 
@@ -333,6 +339,23 @@ export default function Dashboard() {
                                         selectedYear={selectedYear}
                                     />
                                 )}
+
+                                {/* Mobile Calendar - Show ABOVE content on mobile */}
+                                {!isSearching && (
+                                    <div className="flex xl:hidden flex-col gap-6 mt-4">
+                                        <Calendar
+                                            view={calendarView}
+                                            selectedYear={selectedYear}
+                                            selectedMonthIdx={selectedMonthIdx}
+                                            selectedDay={selectedDay}
+                                            onSwitchView={handleSwitchView}
+                                            onSelectMonth={handleSelectMonth}
+                                            onSelectDay={handleSelectDay}
+                                            onSelectYear={handleSelectYear}
+                                            onNavigate={handleNavigate}
+                                        />
+                                    </div>
+                                )}                                
 
                                 {/* Show search header when searching */}
                                 {isSearching && (
@@ -381,29 +404,11 @@ export default function Dashboard() {
                                         selectedYear={selectedDay ? selectedYear : undefined}
                                     />
                                 )}
-
-                                {/* Mobile Calendar & Productivity */}
-                                {!isSearching && (
-                                    <div className="flex xl:hidden flex-col gap-6">
-                                        <Calendar
-                                            view={calendarView}
-                                            selectedYear={selectedYear}
-                                            selectedMonthIdx={selectedMonthIdx}
-                                            selectedDay={selectedDay}
-                                            onSwitchView={handleSwitchView}
-                                            onSelectMonth={handleSelectMonth}
-                                            onSelectDay={handleSelectDay}
-                                            onSelectYear={handleSelectYear}
-                                            onNavigate={handleNavigate}
-                                        />
-                                        {/* <ProductivityChart onClick={() => setTrendModalOpen(true)} /> */}
-                                    </div>
-                                )}
                             </div>
                         </main>
 
                         {/* Right Sidebar (Desktop) - Sticky */}
-                        <aside className="hidden xl:flex w-[420px] 2xl:w-[480px] shrink-0 flex-col gap-6 p-6 pl-0 sticky top-0 h-fit z-20">
+                        <aside className="hidden xl:flex w-105 2xl:w-120 shrink-0 flex-col gap-6 p-6 pl-0 sticky top-0 h-fit z-20">
                             <Calendar
                                 view={calendarView}
                                 selectedYear={selectedYear}
