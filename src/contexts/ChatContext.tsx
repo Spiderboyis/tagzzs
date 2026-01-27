@@ -6,13 +6,21 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useRef,
 } from "react";
 import { useAuth } from "./AuthContext";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { refreshCreditBalance } from "@/hooks/useCreditBalance";
+import { getCache, setCache, getCacheTimestamp, CACHE_KEYS, invalidateCache } from "@/lib/cache";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+
+// Stale time for AI chats cache (10 minutes)
+const AI_CHATS_STALE_TIME = 600000;
+
+// Helper to invalidate AI chats cache
+export const invalidateAIChatsCache = () => invalidateCache(CACHE_KEYS.AI_CHATS);
 
 // Message types
 export interface ChatMessage {
@@ -70,10 +78,30 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isChatOpen, setChatOpen] = useState(false);
+  const lastFetchTimestamp = useRef<number>(0);
+  const isFetching = useRef<boolean>(false);
 
-  // Refresh chat list from backend
-  const refreshChatList = useCallback(async () => {
+  // Refresh chat list from backend with caching
+  const refreshChatList = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return;
+
+    // Prevent concurrent fetches
+    if (isFetching.current) return;
+
+    // Check cache first (unless forcing refresh)
+    if (!forceRefresh) {
+      const cached = getCache<ChatListItem[]>(CACHE_KEYS.AI_CHATS, user.id);
+      const cacheTimestamp = getCacheTimestamp(CACHE_KEYS.AI_CHATS, user.id);
+      const now = Date.now();
+      // Use cache if it exists and is not stale
+      if (cached !== null && cacheTimestamp > 0 && (now - cacheTimestamp) < AI_CHATS_STALE_TIME) {
+        setChatList(cached);
+        lastFetchTimestamp.current = cacheTimestamp;
+        return;
+      }
+    }
+
+    isFetching.current = true;
 
     try {
       const data = await api.get(
@@ -82,15 +110,27 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
       if (data.success && data.chats) {
         setChatList(data.chats);
+        // Cache the result
+        setCache(CACHE_KEYS.AI_CHATS, data.chats, user.id);
+        lastFetchTimestamp.current = Date.now();
       }
     } catch (error) {
       console.error("Failed to fetch chat list:", error);
+    } finally {
+      isFetching.current = false;
     }
   }, [user?.id, api]);
 
   // Load chat list on mount (when user is authenticated)
   useEffect(() => {
     if (user?.id) {
+      // Try to load from cache immediately
+      const cached = getCache<ChatListItem[]>(CACHE_KEYS.AI_CHATS, user.id);
+      if (cached !== null) {
+        setChatList(cached);
+        lastFetchTimestamp.current = getCacheTimestamp(CACHE_KEYS.AI_CHATS, user.id);
+      }
+      // Then refresh in background if needed (will check stale time)
       refreshChatList();
     }
   }, [user?.id, refreshChatList]);
@@ -143,8 +183,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         if (currentChatId === chatId) {
           newChat();
         }
-        // Refresh list
-        await refreshChatList();
+        // Invalidate cache and force refresh
+        invalidateCache(CACHE_KEYS.AI_CHATS);
+        lastFetchTimestamp.current = 0;
+        await refreshChatList(true);
       } catch (error) {
         console.error("Failed to delete chat:", error);
       }
@@ -168,8 +210,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           messages: msgs,
         });
 
-        // Refresh chat list after saving
-        await refreshChatList();
+        // Invalidate cache and force refresh after saving
+        invalidateCache(CACHE_KEYS.AI_CHATS);
+        lastFetchTimestamp.current = 0;
+        await refreshChatList(true);
       } catch (error) {
         console.error("Failed to save chat:", error);
       }

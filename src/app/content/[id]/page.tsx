@@ -2,8 +2,8 @@
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { useContent } from "@/hooks/useContent";
-import { useTags, getTagLineage } from "@/hooks/useTags";
+import { useContent, invalidateContentCache } from "@/hooks/useContent";
+import { useTags, getTagLineage, invalidateTagsCache } from "@/hooks/useTags";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import DetailView from "@/app/database/components/DetailView";
 import { X, SidebarSimple, Sparkle } from "@phosphor-icons/react";
@@ -162,6 +162,10 @@ export default function ContentPage() {
         body: { contentId: currentDetailItem.id },
       });
 
+      // Invalidate caches
+      invalidateContentCache();
+      invalidateTagsCache();
+
       // Redirect to database/neural on success
       if (isNeuralSource) {
         router.push("/neural-graph");
@@ -191,7 +195,12 @@ export default function ContentPage() {
             ...updates,
           },
         });
-        // Optionally refetch content here if needed, or rely on local state updates for now
+        
+        // Invalidate content cache so changes are reflected
+        invalidateContentCache();
+        if (updates.tagsId) {
+          invalidateTagsCache(); // Tags may have updated content counts
+        }
       } catch (error) {
         console.error("Failed to update content:", error);
       }

@@ -5,16 +5,14 @@ import { useEffect, useState, useCallback } from "react";
 import useSWR, { mutate } from "swr";
 import { fetcher } from "@/utils/fetcher";
 import { toast } from "sonner";
-
-// SWR key for credit balance - used for global mutations
-const CREDIT_BALANCE_KEY = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user-database/profile`;
+import { PROFILE_SWR_KEY } from "@/hooks/useUserProfile";
 
 /**
  * Global function to refresh credit balance from anywhere in the app.
  * Call this after any operation that changes the user's credits (AI chat, capture, promo code, etc.)
  */
 export function refreshCreditBalance() {
-  mutate(CREDIT_BALANCE_KEY);
+  mutate(PROFILE_SWR_KEY);
 }
 
 interface UseCreditBalanceReturn {
@@ -36,12 +34,14 @@ export function useCreditBalance(): UseCreditBalanceReturn {
     isLoading: swrLoading,
     mutate: localMutate,
   } = useSWR(
-    user?.id ? CREDIT_BALANCE_KEY : null,
+    user?.id ? PROFILE_SWR_KEY : null,
     fetcher,
     {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      refreshInterval: 0, // No auto-refresh - only refresh when credits are used
+      revalidateOnFocus: false,      // Don't refetch on window focus
+      revalidateOnReconnect: false,  // Don't refetch on reconnect
+      refreshInterval: 0,            // No auto-refresh - only refresh when credits are used
+      dedupingInterval: 300000,      // 5 minutes - dedupe requests within this window
+      revalidateIfStale: false,      // Don't auto-revalidate stale data
     }
   );
 

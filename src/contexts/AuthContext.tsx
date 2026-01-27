@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { clearAllCaches } from "@/lib/cache";
 
 interface User {
   id: string;
@@ -12,7 +13,6 @@ interface User {
     full_name?: string;
     avatar?: string;
     avatar_url?: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     [key: string]: any;
   };
   created_at?: string;
@@ -103,6 +103,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // If refresh failed, proceed to sign out
+      // Clear caches to prevent stale data
+      clearAllCaches();
 
       await fetch(`${BACKEND_URL}/auth/sign-out`, {
         method: "POST",
@@ -110,8 +112,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         credentials: "include",
       });
       setUser(null);
-      setUser(null);
     } catch (e) {
+      clearAllCaches();
       setUser(null);
     }
   };
@@ -150,6 +152,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       setLoading(true);
+      // Clear all cached data to prevent data leakage between users
+      clearAllCaches();
       await fetch(`${BACKEND_URL}/auth/sign-out`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

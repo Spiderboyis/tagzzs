@@ -5,9 +5,13 @@ import type { Database } from "@/types/supabase/types";
 import { generateAvatar } from "@/utils/avatar-generator";
 import useSWR from "swr";
 import { fetcher } from "@/utils/fetcher";
+import { invalidateProfileCache } from "@/lib/cache";
 
 // Define the users table row type from generated Supabase types
 type UsersRow = Database["public"]["Tables"]["users"]["Row"];
+
+// SWR key for profile - shared with useCreditBalance
+export const PROFILE_SWR_KEY = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user-database/profile`;
 
 interface UseUserProfileReturn {
   userProfile: UserProfile | null;
@@ -15,6 +19,9 @@ interface UseUserProfileReturn {
   error: string | null;
   refetch: () => void;
 }
+
+// Re-export for external use
+export { invalidateProfileCache };
 
 export function useUserProfile(): UseUserProfileReturn {
   const { user } = useAuth();
@@ -24,8 +31,15 @@ export function useUserProfile(): UseUserProfileReturn {
   const [error, setError] = useState<string | null>(null);
 
   const { data: result, error: swrError, isLoading: swrLoading, mutate } = useSWR(
-    user?.id ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user-database/profile` : null,
-    fetcher
+    user?.id ? PROFILE_SWR_KEY : null,
+    fetcher,
+    {
+      revalidateOnFocus: false,      // Don't refetch on window focus
+      revalidateOnReconnect: false,  // Don't refetch on reconnect
+      refreshInterval: 0,            // No auto-refresh
+      dedupingInterval: 300000,      // 5 minutes - dedupe requests within this window
+      revalidateIfStale: false,      // Don't auto-revalidate stale data
+    }
   );
 
   useEffect(() => {

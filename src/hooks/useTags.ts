@@ -3,6 +3,14 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
+import { 
+  getCache, 
+  setCache, 
+  getCacheTimestamp, 
+  wasCacheInvalidated,
+  CACHE_KEYS,
+  invalidateTagsCache 
+} from '@/lib/cache';
 
 export interface Tag {
   id: string;
@@ -24,7 +32,7 @@ export interface TagNode extends Tag {
 interface UseTagsOptions {
   /** Auto-refresh on window focus */
   revalidateOnFocus?: boolean;
-  /** Stale time in milliseconds before background revalidation (default: 5 min for tags) */
+  /** Stale time in milliseconds before background revalidation (default: 10 min for tags) */
   staleTime?: number;
 }
 
@@ -41,7 +49,7 @@ interface UseTagsReturn {
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
-// Global cache for tags
+// In-memory cache for tags
 interface TagsCache {
   data: Tag[];
   timestamp: number;
@@ -54,35 +62,61 @@ let globalTagsCache: TagsCache = {
   userId: null
 };
 
+// Re-export invalidateTagsCache for external use
+export { invalidateTagsCache };
+
 export function useTags(options: UseTagsOptions = {}): UseTagsReturn {
   const {
     revalidateOnFocus = true,
-    staleTime = 300000, // 5 minutes stale time for tags
+    staleTime = 600000, // 10 minutes stale time for tags (increased)
   } = options;
 
   const { user } = useAuth();
-  const api = useAuthenticatedApi(); // Use the authenticated API hook
+  const api = useAuthenticatedApi();
   
-  // Initialize state from global cache if valid for current user
+  // Initialize state from global cache or localStorage
   const [tags, setTags] = useState<Tag[]>(() => {
-      if (user && globalTagsCache.userId === user.id) {
-          return globalTagsCache.data;
+    // Try in-memory cache first
+    if (user && globalTagsCache.userId === user.id && globalTagsCache.data.length > 0) {
+      return globalTagsCache.data;
+    }
+    // Try localStorage cache
+    if (user) {
+      const cached = getCache<Tag[]>(CACHE_KEYS.TAGS, user.id);
+      if (cached && cached.length > 0) {
+        // Hydrate global cache from localStorage
+        globalTagsCache = {
+          data: cached,
+          timestamp: getCacheTimestamp(CACHE_KEYS.TAGS, user.id),
+          userId: user.id,
+        };
+        return cached;
       }
-      return [];
+    }
+    return [];
   });
   
   const [loading, setLoading] = useState(() => {
-      if (user && globalTagsCache.userId === user.id && globalTagsCache.data.length > 0) {
-          return false;
+    if (user && globalTagsCache.userId === user.id && globalTagsCache.data.length > 0) {
+      return false;
+    }
+    // Check localStorage cache
+    if (user) {
+      const cached = getCache<Tag[]>(CACHE_KEYS.TAGS, user.id);
+      if (cached && cached.length > 0) {
+        return false;
       }
-      return true;
+    }
+    return true;
   });
   
   const [error, setError] = useState<string | null>(null);
 
   const isFetching = useRef<boolean>(false);
+  // Initialize from global cache timestamp to prevent unnecessary refetches on remount
+  const lastFetchTimestamp = useRef<number>(globalTagsCache.timestamp);
 
-  const fetchTags = useCallback(async () => {
+  const fetchTags = useCallback(async (forceRefresh = false) => {
     if (!user) {
       setTags([]);
       setLoading(false);
@@ -91,27 +125,38 @@ export function useTags(options: UseTagsOptions = {}): UseTagsReturn {
     
     // If cache belongs to a different user, reset it
     if (globalTagsCache.userId !== user.id) {
-        globalTagsCache = {
-            data: [],
-            timestamp: 0,
-            userId: user.id
-        };
+      globalTagsCache = {
+        data: [],
+        timestamp: 0,
+        userId: user.id
+      };
+      lastFetchTimestamp.current = 0;
     }
 
     // Prevent concurrent fetches
     if (isFetching.current) return;
 
-    // Check if data is still fresh (not stale)
+    // Check if cache was invalidated by another action
+    // Use globalTagsCache.timestamp for the check since it persists across remounts
+    const wasInvalidated = wasCacheInvalidated(CACHE_KEYS.TAGS, globalTagsCache.timestamp);
+
+    // Check if data is still fresh (not stale) and not invalidated
     const now = Date.now();
-    if (globalTagsCache.data.length > 0 && (now - globalTagsCache.timestamp) < staleTime) {
+    const cacheIsFresh = !forceRefresh && 
+                         !wasInvalidated && 
+                         globalTagsCache.data.length > 0 && 
+                         (now - globalTagsCache.timestamp) < staleTime;
+    
+    if (cacheIsFresh) {
       if (tags.length === 0) {
-          setTags(globalTagsCache.data);
+        setTags(globalTagsCache.data);
       }
       setLoading(false);
       return;
     }
 
     isFetching.current = true;
+    lastFetchTimestamp.current = now;
     
     // Only show loading spinner on initial load if we don't have cached data
     if (tags.length === 0 && globalTagsCache.data.length === 0) {
@@ -146,10 +191,13 @@ export function useTags(options: UseTagsOptions = {}): UseTagsReturn {
       globalTagsCache.userId = user.id;
 
       setTags(items);
+
+      // Persist to localStorage
+      setCache<Tag[]>(CACHE_KEYS.TAGS, items, user.id);
+
     } catch (err) {
       console.error('[useTags] Fetch error:', err);
       setError(err instanceof Error ? err.message : 'Unknown error occurred');
-      // If authentication expired, invalidating tags might be appropriate
       if (err instanceof Error && err.message === 'Authentication expired') {
         setTags([]);
         globalTagsCache.data = [];
@@ -214,15 +262,18 @@ export function useTags(options: UseTagsOptions = {}): UseTagsReturn {
     fetchTags();
   }, [user]); // Only refetch when user changes
 
-  // Revalidate on window focus
+  // Revalidate on window focus (only if stale or invalidated)
   useEffect(() => {
     if (!revalidateOnFocus) return;
 
     const handleFocus = () => {
-      // Only revalidate if data is stale
+      // Check if cache was invalidated or is stale
       const now = Date.now();
-      if ((now - globalTagsCache.timestamp) >= staleTime) {
-        fetchTags();
+      const wasInvalidated = wasCacheInvalidated(CACHE_KEYS.TAGS, globalTagsCache.timestamp);
+      const isStale = (now - globalTagsCache.timestamp) >= staleTime;
+      
+      if (wasInvalidated || isStale) {
+        fetchTags(true);
       }
     };
 
@@ -230,9 +281,24 @@ export function useTags(options: UseTagsOptions = {}): UseTagsReturn {
     return () => window.removeEventListener('focus', handleFocus);
   }, [revalidateOnFocus, staleTime, fetchTags]);
 
+  // Listen for storage events (cross-tab cache invalidation)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === CACHE_KEYS.TAGS_INVALIDATED) {
+        // Cache was invalidated in another tab, refetch
+        fetchTags(true);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [fetchTags]);
+
   const refetch = useCallback(async () => {
-    globalTagsCache.timestamp = 0; // Force refetch by marking as stale
-    await fetchTags();
+    // Invalidate cache and force refetch
+    invalidateTagsCache();
+    globalTagsCache.timestamp = 0;
+    await fetchTags(true);
   }, [fetchTags]);
 
   return {

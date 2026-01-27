@@ -20,9 +20,10 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "motion/react";
 import { useExtraction } from "@/hooks/useExtraction";
-import { useTags, Tag } from "@/hooks/useTags";
+import { useTags, Tag, invalidateTagsCache } from "@/hooks/useTags";
 import { useToast } from "@/hooks/use-toast";
 import { CreditBalanceDisplay } from "@/components/CreditBalanceDisplay";
+import { invalidateContentCache } from "@/hooks/useContent";
 
 interface QuickCaptureModalProps {
   isOpen: boolean;
@@ -412,6 +413,10 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
         throw new Error(errorData.error?.message || "Failed to save content");
       }
 
+      // Invalidate caches so data is refreshed on next load
+      invalidateContentCache();
+      invalidateTagsCache(); // Tags may have new content counts
+
       toast({
         title: "Success",
         description: "Content saved successfully!",
@@ -721,7 +726,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.96, opacity: 0 }}
             transition={transitions.modal}
-            className="relative w-full max-w-[700px] max-h-[85vh] overflow-hidden rounded-[20px] bg-[#0a0a0a]/95 backdrop-blur-xl border border-white/6 flex flex-col"
+            className="relative w-full max-w-175 max-h-[85vh] overflow-hidden rounded-4xl bg-[#0a0a0a]/95 backdrop-blur-xl border border-white/6 flex flex-col"
             onClick={(e) => e.stopPropagation()}
             style={{
               boxShadow: "0 24px 48px rgba(0,0,0,0.75)",
@@ -779,7 +784,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                       {activeTab === tab.id && (
                         <motion.div
                           layoutId="activeTabIndicator"
-                          className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full"
+                          className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
                           transition={transitions.modal}
                           style={{
                             background: accentColors.primary[70],
@@ -1350,7 +1355,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                             getTagName(tag),
                                           );
                                         }}
-                                        className="cursor-text hover:text-white truncate max-w-[150px]"
+                                        className="cursor-text hover:text-white truncate max-w-37.5"
                                       >
                                         {getTagName(tag)}
                                       </span>
@@ -1549,7 +1554,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                                   getTagName(tag),
                                                 );
                                               }}
-                                              className="cursor-text hover:text-white truncate max-w-[150px]"
+                                              className="cursor-text hover:text-white truncate max-w-37.5"
                                             >
                                               {getTagName(tag)}
                                             </span>
