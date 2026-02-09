@@ -149,6 +149,7 @@ CREATE TABLE content (
     description TEXT,
     read_time INTEGER,
     link VARCHAR,
+    processing_status VARCHAR DEFAULT 'completed', -- pending, processing, completed, failed
     
     is_deleted BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

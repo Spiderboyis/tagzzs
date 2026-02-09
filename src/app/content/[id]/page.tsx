@@ -11,6 +11,8 @@ import LibrarySidebar from "@/app/database/components/LibrarySidebar";
 import NeuralMapSidebar from "@/app/database/components/NeuralMapSidebar";
 import FloatingSearchBar from "@/app/database/components/FloatingSearchBar";
 import { buildTreeData } from "@/utils/buildTreeData";
+import { ContentSkeleton } from "@/components/ui/ContentSkeleton";
+import { useToast } from "@/hooks/use-toast";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
@@ -33,6 +35,126 @@ export default function ContentPage() {
 
   // API for deletion
   const api = useAuthenticatedApi();
+  const { toast } = useToast();
+
+  // Processing status state
+  const [processingStatus, setProcessingStatus] = useState<
+    "pending" | "processing" | "completed" | "failed" | null
+  >(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const processingItems = JSON.parse(
+          localStorage.getItem("processingContent") || "[]",
+        );
+        if (processingItems.some((p: any) => p.contentId === id)) {
+          return "pending";
+        }
+      } catch (e) {
+        console.error("Error reading localStorage", e);
+      }
+    }
+    return null;
+  });
+
+  // Poll for processing status when content is pending/processing
+  useEffect(() => {
+    // Check localStorage first for immediate feedback after redirect
+    if (typeof window !== "undefined") {
+      const processingItems = JSON.parse(
+        localStorage.getItem("processingContent") || "[]",
+      );
+      const isLocalProcessing = processingItems.some(
+        (p: any) => p.contentId === id,
+      );
+      if (isLocalProcessing) {
+        setProcessingStatus("pending");
+      }
+    }
+
+    const item = content.find((c) => c.id === id);
+    if (item) {
+      const status = item.processingStatus;
+      if (status && status !== processingStatus) {
+        setProcessingStatus(status);
+      }
+    }
+
+    // Function to poll status
+    const pollStatus = async () => {
+      try {
+        const response = await fetch(
+          `${BACKEND_URL}/api/user-database/content/status/${id}`,
+          {
+            credentials: "include",
+          },
+        );
+        if (response.ok) {
+          const data = await response.json();
+          const newStatus = data.data?.processingStatus;
+
+          if (newStatus) {
+            setProcessingStatus(newStatus);
+          }
+
+          if (newStatus === "completed") {
+            invalidateContentCache();
+            toast({
+              title: "Content Processed",
+              description: `${data.data?.title || "Content"} is extracted successfully`,
+            });
+
+            // Remove from localStorage processing list
+            const processingItems = JSON.parse(
+              localStorage.getItem("processingContent") || "[]",
+            );
+            const updated = processingItems.filter(
+              (p: any) => p.contentId !== id,
+            );
+            localStorage.setItem("processingContent", JSON.stringify(updated));
+            return true; // Stop polling
+          } else if (newStatus === "failed") {
+            toast({
+              title: "Processing Failed",
+              description:
+                "Content extraction failed. Basic information has been saved.",
+              variant: "destructive",
+            });
+            return true; // Stop polling
+          }
+        }
+      } catch (err) {
+        console.error("Polling error:", err);
+      }
+      return false; // Continue polling
+    };
+
+    // Start polling if we are pending/processing or if we found it in localStorage
+    // OR if we don't have the item yet but suspect it might be processing (handled by initial localStorage check)
+    let pollInterval: NodeJS.Timeout;
+
+    const startPolling = async () => {
+      // Check immediately
+      const stop = await pollStatus();
+      if (!stop) {
+        pollInterval = setInterval(async () => {
+          const shouldStop = await pollStatus();
+          if (shouldStop) clearInterval(pollInterval);
+        }, 3000);
+      }
+    };
+
+    // Only start polling if we are in a pending state or item is not loaded yet (to be safe/robust)
+    // Actually, simply polling if status is not explicitly completed/failed is safer for this transition.
+    if (
+      processingStatus === "pending" ||
+      processingStatus === "processing" ||
+      !item
+    ) {
+      startPolling();
+    }
+
+    return () => clearInterval(pollInterval);
+  }, [id, content, toast]); // Removed processingStatus dependency to avoid re-trigger loops, rely on internal checks
 
   // Build tree structure from real data
   const treeData = useMemo(() => {
@@ -195,7 +317,7 @@ export default function ContentPage() {
             ...updates,
           },
         });
-        
+
         // Invalidate content cache so changes are reflected
         invalidateContentCache();
         if (updates.tagsId) {
@@ -269,27 +391,31 @@ export default function ContentPage() {
         )}
 
         {isLoading ? (
-          <div className="flex flex-1 h-full items-center justify-center">
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-              <p className="text-zinc-500 text-sm">Loading content...</p>
-            </div>
-          </div>
+          <ContentSkeleton />
+        ) : processingStatus === "pending" ||
+          processingStatus === "processing" ? (
+          <ContentSkeleton />
         ) : !currentDetailItem ? (
-          <div className="flex h-full flex-col items-center justify-center bg-black text-white gap-4">
-            <div className="w-16 h-16 mb-2 rounded-full bg-zinc-800 flex items-center justify-center">
-              <X size={32} className="text-zinc-600" />
+          // If explicitly failed, or if we are not expecting it (null status), show Not Found
+          // If completed but not yet in list, show loading
+          processingStatus === "completed" ? (
+            <ContentSkeleton />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center bg-black text-white gap-4">
+              <div className="w-16 h-16 mb-2 rounded-full bg-zinc-800 flex items-center justify-center">
+                <X size={32} className="text-zinc-600" />
+              </div>
+              <p className="text-lg">Content not found</p>
+              <button
+                onClick={() =>
+                  router.push(isNeuralSource ? "/neural-graph" : "/dashboard")
+                }
+                className="mt-4 text-zinc-400 hover:text-white border border-zinc-700 px-4 py-2 rounded-lg transition-colors"
+              >
+                Return to {isNeuralSource ? "Neural Graph" : "Dashboard"}
+              </button>
             </div>
-            <p className="text-lg">Content not found</p>
-            <button
-              onClick={() =>
-                router.push(isNeuralSource ? "/neural-graph" : "/dashboard")
-              }
-              className="mt-4 text-zinc-400 hover:text-white border border-zinc-700 px-4 py-2 rounded-lg transition-colors"
-            >
-              Return to {isNeuralSource ? "Neural Graph" : "Dashboard"}
-            </button>
-          </div>
+          )
         ) : (
           <DetailView
             currentDetailItem={currentDetailItem}

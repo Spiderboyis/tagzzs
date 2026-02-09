@@ -2,6 +2,7 @@
 import time
 import uuid
 import random
+import asyncio
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Request, Depends
@@ -19,7 +20,7 @@ from app.utils.supabase.supabase_client import supabase
 class AddContentSchema(BaseModel):
     userId: str = Field(..., min_length=1)
     link: str
-    title: str = Field(..., min_length=1)
+    title: str = Field(default="Untitled")
     contentType: Optional[str] = "article"
     description: Optional[str] = ""
     personalNotes: str = ""
@@ -29,6 +30,7 @@ class AddContentSchema(BaseModel):
     thumbnailUrl: Optional[str] = None
     rawContent: str = ""
     summary: Optional[str] = ""
+    analyzeWithAI: bool = False  # If True, save first and run extraction in background
 
 
 class EmbeddingMetadata(BaseModel):
@@ -266,12 +268,15 @@ async def add_content(req: Request):
                 for tag in validated_data.tagsId
             }
 
+            # Determine processing status based on analyzeWithAI flag
+            processing_status = "pending" if validated_data.analyzeWithAI else "completed"
+
             result = supabase.rpc(
                 "sync_full_content",
                 {
                     "p_contentid": content_id,
                     "p_userid": user_id,
-                    "p_title": validated_data.title,
+                    "p_title": validated_data.title or "Untitled",
                     "p_content_link": str(validated_data.link),
                     "p_description": validated_data.description,
                     "p_thumbnail_url": validated_data.thumbnailUrl,
@@ -283,12 +288,21 @@ async def add_content(req: Request):
                     "p_raw_content": validated_data.rawContent,
                     "p_note_data": {"text": validated_data.personalNotes},
                     "p_tag_map": tag_color_map,
-                    "p_embedding_metadata": embedding_metadata,
+                    "p_embedding_metadata": embedding_metadata if not validated_data.analyzeWithAI else None,
                 },
             ).execute()
 
             if hasattr(result, "error") and result.error:
                 raise Exception(result.error.message)
+            
+            # Update processing_status separately (backward compatible - column may not exist yet)
+            if validated_data.analyzeWithAI:
+                try:
+                    supabase.table("content").update({
+                        "processing_status": processing_status
+                    }).eq("contentid", content_id).execute()
+                except Exception as status_err:
+                    print(f"Could not update processing_status (column may not exist): {status_err}")
 
         except Exception as db_error:
             print(f"Supabase Sync Error: {db_error}")
@@ -304,10 +318,212 @@ async def add_content(req: Request):
                 },
             )
 
+        # If analyzeWithAI is True, spawn background task for extraction
+        if validated_data.analyzeWithAI:
+            async def background_extraction():
+                try:
+                    url = str(validated_data.link)
+                    extracted_title = "Untitled"
+                    extracted_description = ""
+                    extracted_thumbnail = None
+                    extracted_raw_content = ""
+                    extracted_content_type = validated_data.contentType or "article"
+                    
+                    # Determine URL type and extract content
+                    is_youtube = "youtube.com" in url or "youtu.be" in url
+                    final_tags = []  # Initialize at top level
+                    
+                    if is_youtube:
+                        # YouTube extraction
+                        try:
+                            from app.services.extractors.youtube import extract_youtube_content
+                            from app.services.extractors.youtube.output_structuring import structure_youtube_extraction_output
+                            
+                            response = await extract_youtube_content(url)
+                            structured = structure_youtube_extraction_output(response)
+                            
+                            content_data = structured.get("content", {})
+                            metadata = structured.get("metadata", {})
+                            
+                            extracted_title = content_data.get("title") or metadata.get("originalTitle") or metadata.get("title") or "Untitled"
+                            extracted_description = content_data.get("summary") or content_data.get("description") or ""
+                            extracted_thumbnail = metadata.get("thumbnailUrl") or metadata.get("thumbnail_url")
+                            extracted_raw_content = content_data.get("transcript") or content_data.get("extracted_text") or ""
+                            extracted_content_type = "video"
+                            
+                            # Extract tags from YouTube response
+                            raw_tags = structured.get("tags", [])
+                            # structured['tags'] is a list of dicts: [{'tag': '...', ...}]
+                            final_tags = [t.get("tag") for t in raw_tags if t.get("tag")]
+                        except Exception as yt_err:
+                            print(f"YouTube extraction failed: {yt_err}")
+                            final_tags = []
+                    else:
+                        # Website extraction
+                        final_tags = []
+                        try:
+                            from app.services.extractors.web import extract_content
+                            
+                            response = await extract_content(url)
+                            
+                            if response.success:
+                                if response.meta_data:
+                                    extracted_title = response.meta_data.title or response.meta_data.og_title or response.meta_data.twitter_title or "Untitled"
+                                    extracted_description = response.meta_data.description or response.meta_data.og_description or response.meta_data.twitter_description or ""
+                                    extracted_thumbnail = response.meta_data.og_image or response.meta_data.twitter_image or response.meta_data.thumbnail_url
+
+                                if response.cleaned_data:
+                                    extracted_raw_content = response.cleaned_data.main_content or ""
+                                    
+                                    # Fallback if description is empty but we have content
+                                    if not extracted_description and extracted_raw_content:
+                                        extracted_description = extracted_raw_content[:200] + "..."
+                                    
+                                    # Generate AI Tags for website content
+                                    if extracted_raw_content and len(extracted_raw_content) >= 20:
+                                        try:
+                                            from app.services.refiners.tag_generators import generate_tags
+                                            
+                                            tag_response = await generate_tags(extracted_raw_content[:3000], top_k=5)
+                                            
+                                            if tag_response.success and tag_response.tags:
+                                                final_tags = [t.name for t in tag_response.tags]
+                                        except Exception as tag_err:
+                                            print(f"Tag generation failed: {tag_err}")
+                        except Exception as web_err:
+                            try:
+                                print(f"Website extraction failed: {web_err}")
+                            except:
+                                pass
+                    
+                    # Update content record with extracted data
+                    update_data = {
+                        "title": extracted_title,
+                        "description": extracted_description,
+                        "thumbnail_url": extracted_thumbnail,
+                        "content_type": extracted_content_type,
+                        "processing_status": "completed",
+                        "updated_at": datetime.now().isoformat()
+                    }
+                    
+                    supabase.table("content").update(update_data).eq("contentid", content_id).execute()
+
+                    # Save generated tags
+                    if final_tags:
+                        from app.utils.tag_slugs_generator import generate_tag_slug
+                        
+                        for tag_name in final_tags:
+                            try:
+                                tk = tag_name.strip()
+                                if not tk: continue
+
+                                # Generate proper slug
+                                slug = generate_tag_slug(tk)
+                                
+                                # Check if tag exists (using correct column names: tagid, tag_name)
+                                tag_res = supabase.table("tags").select("tagid").eq("slug", slug).eq("userid", user_id).execute()
+                                tag_id = None
+                                if tag_res.data:
+                                    tag_id = tag_res.data[0]['tagid']
+                                else:
+                                    # Create new tag using RPC (same pattern as manual tag creation)
+                                    try:
+                                        rpc_res = supabase.rpc(
+                                            "get_or_create_tag",
+                                            {
+                                                "p_tag_name": tk,
+                                                "p_userid": user_id,
+                                                "p_color_code": f"#{random.randint(0, 0xFFFFFF):06x}",
+                                                "p_parent_id": None,
+                                            },
+                                        ).execute()
+                                        
+                                        # RPC returns the tag ID
+                                        if rpc_res.data:
+                                            if isinstance(rpc_res.data, str):
+                                                tag_id = rpc_res.data
+                                            elif isinstance(rpc_res.data, dict):
+                                                tag_id = rpc_res.data.get("tagid") or rpc_res.data.get("id")
+                                        
+                                        # If RPC didn't return ID, fetch it
+                                        if not tag_id:
+                                            chk = supabase.table("tags").select("tagid").eq("slug", slug).eq("userid", user_id).execute()
+                                            if chk.data:
+                                                tag_id = chk.data[0]["tagid"]
+                                    except Exception as rpc_err:
+                                        print(f"Tag RPC failed for {tk}: {rpc_err}")
+                                
+                                # Link to Content (using correct column names: contentid, tagid, userid)
+                                if tag_id:
+                                    try:
+                                        supabase.table("content_tags").insert({
+                                            "contentid": content_id,
+                                            "tagid": tag_id,
+                                            "userid": user_id  # Required NOT NULL column
+                                        }).execute()
+                                    except Exception:
+                                        # Ignore duplicate link errors
+                                        pass
+                                        
+                            except Exception as tag_save_err:
+                                print(f"Failed to save tag {tag_name}: {tag_save_err}")
+                    
+                    # Update raw content
+                    if extracted_raw_content:
+                        supabase.table("rawcontent").upsert({
+                            "contentid": content_id,
+                            "userid": user_id,
+                            "rawcontent": extracted_raw_content
+                        }).execute()
+                    
+                    # Run embedding if we have content
+                    if extracted_raw_content or extracted_description:
+                        try:
+                            from app.api.embed import embed_and_store_chunks
+                            
+                            embedding_payload = {
+                                "user_id": user_id,
+                                "content_id": content_id,
+                                "extracted_text": extracted_raw_content or extracted_description,
+                                "summary": extracted_description,
+                                "tags": validated_data.tagsId or [],
+                                "source_url": url,
+                                "source_type": extracted_content_type,
+                            }
+                            emb_data = await embed_and_store_chunks(embedding_payload)
+                            
+                            if emb_data.get("success"):
+                                supabase.table("content_embeddings").upsert({
+                                    "contentid": content_id,
+                                    "userid": user_id,
+                                    "chroma_doc_ids": emb_data.get("chroma_doc_ids", []),
+                                    "summary_doc_id": emb_data.get("summary_doc_id", ""),
+                                    "chunk_count": emb_data.get("chunk_count", 0),
+                                    "updated_at": datetime.now().isoformat(),
+                                }).execute()
+                        except Exception as e:
+                            print(f"Background embedding failed: {e}")
+                    
+                    print(f"Background extraction completed for content_id: {content_id}")
+                    
+                except Exception as e:
+                    print(f"Background extraction failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Mark content as failed
+                    supabase.table("content").update({
+                        "processing_status": "failed",
+                        "updated_at": datetime.now().isoformat()
+                    }).eq("contentid", content_id).execute()
+            
+            # Start background task
+            asyncio.create_task(background_extraction())
+
         processing_time = time.time() - start_time
         return create_auth_response(
             data={
                 "contentId": content_id,
+                "processingStatus": processing_status,
                 "processingTime": processing_time,
                 "message": "Content synced successfully to Supabase",
                 "timestamp": datetime.now(timezone.utc)
@@ -827,6 +1043,7 @@ async def get_user_content(request: Request, user: dict = Depends(get_current_us
                 "tags": tags_list,
                 "createdAt": item.get("created_at"),
                 "updatedAt": item.get("updated_at"),
+                "processingStatus": item.get("processing_status", "completed"),
             }
             content_list.append(mapped_item)
 
@@ -853,4 +1070,48 @@ async def get_user_content(request: Request, user: dict = Depends(get_current_us
                 "success": False,
                 "error": {"code": "INTERNAL_ERROR", "message": str(e)},
             },
+        )
+
+
+@router.get("/status/{content_id}")
+async def get_content_status(
+    content_id: str, request: Request, user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Get the processing status of a content item for polling."""
+    try:
+        if not user:
+            return create_auth_error("Authentication required")
+
+        user_id = user["id"]
+
+        result = (
+            supabase.table("content")
+            .select("title, processing_status")
+            .eq("contentid", content_id)
+            .eq("userid", user_id)
+            .execute()
+        )
+
+        if not result.data:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": "Content not found"},
+            )
+
+        item = result.data[0]
+        return {
+            "success": True,
+            "data": {
+                "contentId": content_id,
+                "title": item.get("title", "Untitled"),
+                "processingStatus": item.get("processing_status", "completed"),
+            },
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)},
         )

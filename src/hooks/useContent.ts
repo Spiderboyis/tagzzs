@@ -27,6 +27,7 @@ export interface ContentItem {
   tagsId: string[];
   createdAt: string;
   updatedAt: string;
+  processingStatus?: 'pending' | 'processing' | 'completed' | 'failed';
 }
 
 interface UseContentOptions {

@@ -196,16 +196,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
           return;
         }
 
-        // Check if YouTube URL
-        // (Handled by input change, but double check here)
-        if (isYouTubeUrl(trimmedUrl) || isYouTubeLink) {
-          toast({
-            title: "Coming Soon",
-            description: "YouTube analysis coming soon",
-          });
-          setViewState("capture");
-          return;
-        }
+        // YouTube URLs are now supported - proceed with extraction
 
         // Web URL extraction
         const result = await extractFromUrl(trimmedUrl);
@@ -323,16 +314,80 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
   const handleUrlChange = (value: string) => {
     setUrlInput(value);
     const isYT = isYouTubeUrl(value);
-    if (isYT && !isYouTubeLink) {
-      toast({
-        title: "Youtube",
-        description: "youtube analysis coming soon",
-      });
-    }
     setIsYouTubeLink(isYT);
   };
 
-  const handleSave = async () => {
+  // Handle Edit Details - quick save without AI analysis
+  const handleEditDetails = async () => {
+    if (!urlInput.trim() && !selectedFile) {
+      toast({
+        title: "Error",
+        description:
+          activeTab === "document"
+            ? "Please select a file"
+            : "Please enter a URL",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Set minimal preview data for quick save
+    setPreviewData({
+      title: "Untitled",
+      description: "",
+      tags: [],
+      summary: "",
+      personalNotes: "",
+      source: urlInput ? new URL(urlInput).hostname : "Document",
+      thumbnail: "",
+      contentType: activeTab === "document" ? "document" : "article",
+    });
+
+    // Switch to preview mode for editing
+    setViewState("preview");
+  };
+
+  // Handle Analyze with KAI AI - save immediately and redirect, extraction happens in backend
+  const handleAnalyzeWithAI = async () => {
+    if (!urlInput.trim() && !selectedFile) {
+      toast({
+        title: "Error",
+        description:
+          activeTab === "document"
+            ? "Please select a file"
+            : "Please enter a URL",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Set minimal preview data for immediate save
+    let hostname = "local";
+    try {
+      if (urlInput.trim()) {
+        hostname = new URL(urlInput).hostname;
+      }
+    } catch {
+      hostname = "local";
+    }
+
+    setPreviewData({
+      title: "Untitled",
+      description: "",
+      tags: [],
+      summary: "",
+      personalNotes: "",
+      source: urlInput ? hostname : "Document",
+      thumbnail: "",
+      contentType: activeTab === "document" ? "document" : "article",
+    });
+
+    // Save with AI analysis flag - backend will process in background
+    await handleSave({ analyzeWithAI: true });
+  };
+
+  const handleSave = async (options?: { analyzeWithAI?: boolean }) => {
+    const analyzeWithAI = options?.analyzeWithAI ?? false;
     if (isLoading) return;
     setIsLoading(true);
     try {
@@ -390,6 +445,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
         thumbnailUrl: previewData.thumbnail || null,
         rawContent: rawContent,
         summary: "", // No longer sending separate summary
+        analyzeWithAI: analyzeWithAI, // Controls background processing
       };
 
       console.log("--- DEBUG: Save Payload ---", payload);
@@ -413,15 +469,55 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
         throw new Error(errorData.error?.message || "Failed to save content");
       }
 
+      const responseData = await response.json();
+      const contentId = responseData.data?.contentId;
+
       // Invalidate caches so data is refreshed on next load
       invalidateContentCache();
       invalidateTagsCache(); // Tags may have new content counts
 
-      toast({
-        title: "Success",
-        description: "Content saved successfully!",
-      });
+      // Show appropriate toast based on processing mode
+      if (analyzeWithAI) {
+        // Show processing notification for YouTube and other AI analysis
+        if (isYouTubeLink) {
+          toast({
+            title: "Processing Started",
+            description: "You will be notified when content is processed",
+          });
+        } else {
+          toast({
+            title: "Analyzing",
+            description: "Content is being processed...",
+          });
+        }
+      } else {
+        toast({
+          title: "Success",
+          description: "Content saved successfully!",
+        });
+      }
+
+      // Store in localStorage for global processing notification (applies to manual saves too for loading state)
+      if (contentId) {
+        const processingItems = JSON.parse(
+          localStorage.getItem("processingContent") || "[]",
+        );
+        processingItems.push({
+          contentId,
+          title: previewData.title || "Untitled",
+        });
+        localStorage.setItem(
+          "processingContent",
+          JSON.stringify(processingItems),
+        );
+      }
+
       onClose();
+
+      // Redirect to content page
+      if (contentId) {
+        router.push(`/content/${contentId}`);
+      }
 
       // Reset state
       setViewState("capture");
@@ -726,7 +822,11 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.96, opacity: 0 }}
             transition={transitions.modal}
-            className="relative w-full max-w-175 max-h-[85vh] overflow-hidden rounded-4xl bg-[#0a0a0a]/95 backdrop-blur-xl border border-white/6 flex flex-col"
+            className={`relative w-full max-h-[85vh] overflow-hidden rounded-4xl bg-[#0a0a0a]/95 backdrop-blur-xl border border-white/6 flex flex-col ${
+              viewState === "preview"
+                ? "max-w-175 lg:max-w-[900px]"
+                : "max-w-175"
+            }`}
             onClick={(e) => e.stopPropagation()}
             style={{
               boxShadow: "0 24px 48px rgba(0,0,0,0.75)",
@@ -870,16 +970,45 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                           save
                         </p>
 
-                        {/* Analyze Button */}
-                        <motion.button
-                          whileHover={{ scale: 1.01 }}
-                          whileTap={{ scale: 0.99 }}
-                          onClick={handleAnalyze}
-                          className={`w-full py-3.5 rounded-2xl font-medium transition-all flex items-center justify-center gap-2 bg-white text-black hover:bg-[#EDEDED]`}
-                        >
-                          <Sparkles className="w-4 h-4" />
-                          Analyze with KAI AI
-                        </motion.button>
+                        {/* Action Buttons - Two Side-by-Side */}
+                        <div className="flex gap-3">
+                          <motion.button
+                            whileHover={{ scale: 1.01 }}
+                            whileTap={{ scale: 0.99 }}
+                            onClick={handleEditDetails}
+                            disabled={isLoading || !urlInput.trim()}
+                            className={`flex-1 py-3.5 rounded-2xl font-medium transition-all flex items-center justify-center gap-2 ${
+                              urlInput.trim() && !isLoading
+                                ? "bg-white/10 text-white hover:bg-white/15 border border-white/20"
+                                : "bg-white/5 text-white/50 cursor-not-allowed border border-white/10"
+                            }`}
+                          >
+                            {isLoading ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <FileText className="w-4 h-4" />
+                            )}
+                            Edit Details
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ scale: 1.01 }}
+                            whileTap={{ scale: 0.99 }}
+                            onClick={handleAnalyzeWithAI}
+                            disabled={isLoading || !urlInput.trim()}
+                            className={`flex-1 py-3.5 rounded-2xl font-medium transition-all flex items-center justify-center gap-2 ${
+                              urlInput.trim() && !isLoading
+                                ? "bg-white text-black hover:bg-[#EDEDED]"
+                                : "bg-white/25 text-white/50 cursor-not-allowed"
+                            }`}
+                          >
+                            {extractionLoading ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Sparkles className="w-4 h-4" />
+                            )}
+                            Analyze with KAI AI
+                          </motion.button>
+                        </div>
                       </div>
                     )}
 
@@ -963,25 +1092,45 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                           <span>pdf, docx, pptx, images supported</span>
                         </div>
 
-                        {/* Analyze Button */}
-                        <motion.button
-                          whileHover={{ scale: 1.01 }}
-                          whileTap={{ scale: 0.99 }}
-                          onClick={handleAnalyze}
-                          disabled={!selectedFile || extractionLoading}
-                          className={`w-full py-3.5 rounded-2xl font-medium transition-all flex items-center justify-center gap-2 ${
-                            selectedFile && !extractionLoading
-                              ? "bg-white text-black hover:bg-[#EDEDED]"
-                              : "bg-white/25 text-white/50 cursor-not-allowed"
-                          }`}
-                        >
-                          {extractionLoading ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Sparkles className="w-4 h-4" />
-                          )}
-                          Analyze with KAI AI
-                        </motion.button>
+                        {/* Action Buttons - Two Side-by-Side */}
+                        <div className="flex gap-3">
+                          <motion.button
+                            whileHover={{ scale: 1.01 }}
+                            whileTap={{ scale: 0.99 }}
+                            onClick={handleEditDetails}
+                            disabled={!selectedFile || isLoading}
+                            className={`flex-1 py-3.5 rounded-2xl font-medium transition-all flex items-center justify-center gap-2 ${
+                              selectedFile && !isLoading
+                                ? "bg-white/10 text-white hover:bg-white/15 border border-white/20"
+                                : "bg-white/5 text-white/50 cursor-not-allowed border border-white/10"
+                            }`}
+                          >
+                            {isLoading ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <FileText className="w-4 h-4" />
+                            )}
+                            Edit Details
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ scale: 1.01 }}
+                            whileTap={{ scale: 0.99 }}
+                            onClick={handleAnalyzeWithAI}
+                            disabled={!selectedFile || extractionLoading}
+                            className={`flex-1 py-3.5 rounded-2xl font-medium transition-all flex items-center justify-center gap-2 ${
+                              selectedFile && !extractionLoading
+                                ? "bg-white text-black hover:bg-[#EDEDED]"
+                                : "bg-white/25 text-white/50 cursor-not-allowed"
+                            }`}
+                          >
+                            {extractionLoading ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Sparkles className="w-4 h-4" />
+                            )}
+                            Analyze with KAI AI
+                          </motion.button>
+                        </div>
                       </div>
                     )}
 
@@ -1256,392 +1405,713 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="space-y-5"
+                    className="lg:flex lg:gap-6"
                   >
-                    {/* Large Video Preview Card */}
-                    <div
-                      className="rounded-2xl border border-white/6 overflow-hidden bg-[#0B0B0D]/50"
-                      style={{
-                        boxShadow: "0 12px 24px rgba(0,0,0,0.6)",
-                      }}
-                    >
-                      {/* Thumbnail */}
-                      <div className="relative w-full h-64 bg-[#000000]">
-                        {previewData.thumbnail ? (
-                          <img
-                            src={previewData.thumbnail}
-                            alt=""
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-white/20">
-                            <Sparkles className="w-12 h-12 opacity-50" />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Content */}
-                      <div className="p-5 space-y-4">
-                        <h3 className="text-lg text-white">
-                          {previewData.title}
-                        </h3>
-
-                        {/* Source with icon */}
-                        <div className="flex items-center gap-2">
-                          <div className="w-5 h-5 bg-white rounded flex items-center justify-center">
-                            <div className="w-3 h-3 bg-black rounded-sm" />
-                          </div>
-                          <span className="text-sm text-white/70">
-                            {previewData.source}
-                          </span>
+                    {/* Left Side - Thumbnail/Preview Card (Desktop) / Top Section (Mobile) */}
+                    <div className="lg:w-[340px] lg:shrink-0">
+                      {/* Large Video Preview Card */}
+                      <div
+                        className="rounded-2xl border border-white/6 overflow-hidden bg-[#0B0B0D]/50"
+                        style={{
+                          boxShadow: "0 12px 24px rgba(0,0,0,0.6)",
+                        }}
+                      >
+                        {/* Thumbnail */}
+                        <div className="relative w-full h-48 lg:h-56 bg-[#000000]">
+                          {previewData.thumbnail ? (
+                            <img
+                              src={previewData.thumbnail}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-white/20">
+                              <Sparkles className="w-12 h-12 opacity-50" />
+                            </div>
+                          )}
                         </div>
 
-                        {/* Tags - Hierarchical Display with Drag-and-Drop */}
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-1 flex-wrap">
-                            <Reorder.Group
-                              axis="x"
-                              values={getSortedTags()}
-                              onReorder={handleTagReorder}
-                              className="flex items-center gap-1 flex-wrap"
-                            >
-                              {getSortedTags().map((tag, index) => (
-                                <Reorder.Item
-                                  key={getTagName(tag)}
-                                  value={tag}
-                                  className="flex items-center group relative cursor-grab active:cursor-grabbing"
-                                  whileDrag={{
-                                    scale: 1.05,
-                                    boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
-                                    zIndex: 50,
-                                  }}
-                                >
-                                  {/* Arrow before child tags (except first) */}
-                                  {index > 0 && (
-                                    <ArrowRight className="w-3.5 h-3.5 text-white/30 mr-0.5 shrink-0" />
-                                  )}
-                                  {/* Badge */}
-                                  <div
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                                      editingTagIndex === index
-                                        ? "bg-white/10 border-[#A78BFA] ring-1 ring-[#A78BFA]/50"
-                                        : "bg-white/6 text-white/75 border-white/6 hover:bg-white/10"
-                                    }`}
+                        {/* Content - Title and Source */}
+                        <div className="p-4 lg:p-5 space-y-3">
+                          <h3 className="text-base lg:text-lg text-white line-clamp-2">
+                            {previewData.title}
+                          </h3>
+
+                          {/* Source with icon */}
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 bg-white rounded flex items-center justify-center">
+                              <div className="w-3 h-3 bg-black rounded-sm" />
+                            </div>
+                            <span className="text-sm text-white/70">
+                              {previewData.source}
+                            </span>
+                          </div>
+
+                          {/* Tags - Desktop Only (Hidden on mobile, shown in edit details) */}
+                          <div className="hidden lg:block space-y-3">
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <Reorder.Group
+                                axis="x"
+                                values={getSortedTags()}
+                                onReorder={handleTagReorder}
+                                className="flex items-center gap-1 flex-wrap"
+                              >
+                                {getSortedTags().map((tag, index) => (
+                                  <Reorder.Item
+                                    key={getTagName(tag)}
+                                    value={tag}
+                                    className="flex items-center group relative cursor-grab active:cursor-grabbing"
+                                    whileDrag={{
+                                      scale: 1.05,
+                                      boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+                                      zIndex: 50,
+                                    }}
                                   >
-                                    <GripVertical className="w-3 h-3 text-white/30 shrink-0" />
-                                    {editingTagIndex === index ? (
-                                      <input
-                                        type="text"
-                                        value={editingTagName}
-                                        onChange={(e) =>
-                                          setEditingTagName(e.target.value)
-                                        }
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter")
-                                            finishEditingTag();
-                                          if (e.key === "Escape")
-                                            setEditingTagIndex(null);
-                                        }}
-                                        onBlur={finishEditingTag}
-                                        autoFocus
-                                        className="bg-transparent border-none outline-none text-white w-24 text-sm"
-                                      />
-                                    ) : (
-                                      <span
+                                    {/* Arrow before child tags (except first) */}
+                                    {index > 0 && (
+                                      <ArrowRight className="w-3.5 h-3.5 text-white/30 mr-0.5 shrink-0" />
+                                    )}
+                                    {/* Badge */}
+                                    <div
+                                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                                        editingTagIndex === index
+                                          ? "bg-white/10 border-[#A78BFA] ring-1 ring-[#A78BFA]/50"
+                                          : "bg-white/6 text-white/75 border-white/6 hover:bg-white/10"
+                                      }`}
+                                    >
+                                      <GripVertical className="w-2.5 h-2.5 text-white/30 shrink-0" />
+                                      {editingTagIndex === index ? (
+                                        <input
+                                          type="text"
+                                          value={editingTagName}
+                                          onChange={(e) =>
+                                            setEditingTagName(e.target.value)
+                                          }
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter")
+                                              finishEditingTag();
+                                            if (e.key === "Escape")
+                                              setEditingTagIndex(null);
+                                          }}
+                                          onBlur={finishEditingTag}
+                                          autoFocus
+                                          className="bg-transparent border-none outline-none text-white w-20 text-xs"
+                                        />
+                                      ) : (
+                                        <span
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            startEditingTag(
+                                              index,
+                                              getTagName(tag),
+                                            );
+                                          }}
+                                          className="cursor-text hover:text-white truncate max-w-24"
+                                        >
+                                          {getTagName(tag)}
+                                        </span>
+                                      )}
+                                      <button
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          startEditingTag(
-                                            index,
-                                            getTagName(tag),
-                                          );
+                                          removeTag(tag);
                                         }}
-                                        className="cursor-text hover:text-white truncate max-w-37.5"
+                                        className="p-0.5 ml-0.5 rounded-full hover:bg-white/15 transition-colors shrink-0"
                                       >
-                                        {getTagName(tag)}
-                                      </span>
-                                    )}
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        removeTag(tag);
-                                      }}
-                                      className="p-0.5 ml-1 rounded-full hover:bg-white/15 transition-colors shrink-0"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                </Reorder.Item>
-                              ))}
-                            </Reorder.Group>
+                                        <X className="w-2.5 h-2.5" />
+                                      </button>
+                                    </div>
+                                  </Reorder.Item>
+                                ))}
+                              </Reorder.Group>
 
-                            {/* Add Button - OUTSIDE Reorder.Group */}
-                            {getSortedTags().length > 0 && (
-                              <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
-                            )}
-                            {addingContext === "preview" ? (
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={newChildTagName}
-                                  onChange={(e) =>
-                                    setNewChildTagName(e.target.value)
-                                  }
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") addChildTag();
-                                    if (e.key === "Escape")
-                                      setAddingContext("none");
-                                  }}
-                                  onBlur={() => {
-                                    if (!newChildTagName.trim()) {
-                                      setAddingContext("none");
+                              {/* Add Button - OUTSIDE Reorder.Group */}
+                              {getSortedTags().length > 0 && (
+                                <ArrowRight className="w-3.5 h-3.5 text-white/30 mx-0.5 shrink-0" />
+                              )}
+                              {addingContext === "preview" ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    value={newChildTagName}
+                                    onChange={(e) =>
+                                      setNewChildTagName(e.target.value)
                                     }
-                                  }}
-                                  placeholder="New tag..."
-                                  autoFocus
-                                  className="px-3 py-1.5 rounded-full text-sm bg-white/6 text-white placeholder:text-white/45 border border-white/12 outline-none focus:border-[#A78BFA] w-28"
-                                />
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") addChildTag();
+                                      if (e.key === "Escape")
+                                        setAddingContext("none");
+                                    }}
+                                    onBlur={() => {
+                                      if (!newChildTagName.trim()) {
+                                        setAddingContext("none");
+                                      }
+                                    }}
+                                    placeholder="New tag..."
+                                    autoFocus
+                                    className="px-2.5 py-1 rounded-full text-xs bg-white/6 text-white placeholder:text-white/45 border border-white/12 outline-none focus:border-[#A78BFA] w-24"
+                                  />
+                                  <button
+                                    onClick={addChildTag}
+                                    className="p-1 rounded-full bg-white/6 hover:bg-white/10 transition-colors cursor-pointer"
+                                  >
+                                    <Plus className="w-3 h-3 text-white/75" />
+                                  </button>
+                                </div>
+                              ) : (
                                 <button
-                                  onClick={addChildTag}
-                                  className="p-1.5 rounded-full bg-white/6 hover:bg-white/10 transition-colors cursor-pointer"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAddingContext("preview");
+                                  }}
+                                  className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-white/6 text-white/60 border border-dashed border-white/12 hover:border-white/25 hover:text-white/80 transition-all cursor-pointer"
                                 >
-                                  <Plus className="w-3.5 h-3.5 text-white/75" />
+                                  <Plus className="w-3 h-3" />
+                                  <span>Add</span>
                                 </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setAddingContext("preview");
-                                }}
-                                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/60 border border-dashed border-white/12 hover:border-white/25 hover:text-white/80 transition-all cursor-pointer"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                                <span>Add</span>
-                              </button>
-                            )}
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
+
+                      {/* AI Label */}
+                      <div className="flex items-center gap-2 text-xs text-white/45 mt-4">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>After analyzing with KAI AI</span>
+                      </div>
                     </div>
 
-                    {/* AI Label */}
-                    <div className="flex items-center gap-2 text-xs text-white/45">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>After analyzing with KAI AI</span>
-                    </div>
-
-                    {/* Metadata Section */}
-                    <div>
-                      <button
-                        onClick={() => setMetadataExpanded(!metadataExpanded)}
-                        className="flex items-center justify-between w-full py-3 px-4 rounded-xl transition-all hover:bg-white/6 text-white/70 hover:text-white cursor-pointer"
-                      >
-                        <span className="text-sm font-medium">
-                          Edit details (optional)
-                        </span>
-                        <motion.div
-                          animate={{ rotate: metadataExpanded ? 180 : 0 }}
-                          transition={transitions.standard}
-                        >
-                          <ChevronDown className="w-4 h-4" />
-                        </motion.div>
-                      </button>
-
-                      <AnimatePresence>
-                        {metadataExpanded && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            className="overflow-hidden"
+                    {/* Right Side - Scrollable Edit Details (Desktop) / Bottom Section (Mobile) */}
+                    <div className="flex-1 mt-5 lg:mt-0 lg:max-h-[400px] lg:overflow-y-auto lg:pr-2 custom-scrollbar">
+                      {/* Mobile Tags Display (Hidden on Desktop) */}
+                      <div className="lg:hidden space-y-3 mb-5">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <Reorder.Group
+                            axis="x"
+                            values={getSortedTags()}
+                            onReorder={handleTagReorder}
+                            className="flex items-center gap-1 flex-wrap"
                           >
-                            <div className="pt-4 space-y-4">
-                              <div>
-                                <label className="block text-sm font-medium mb-2 text-white/70">
-                                  Title
-                                </label>
-                                <input
-                                  type="text"
-                                  value={previewData.title}
-                                  onChange={(e) =>
-                                    setPreviewData({
-                                      ...previewData,
-                                      title: e.target.value,
-                                    })
-                                  }
-                                  className="w-full px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white focus:border-white/12 transition-all outline-none"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium mb-2 text-white/70">
-                                  Description
-                                </label>
-                                <textarea
-                                  value={previewData.description}
-                                  onChange={(e) =>
-                                    setPreviewData({
-                                      ...previewData,
-                                      description: e.target.value,
-                                    })
-                                  }
-                                  rows={3}
-                                  className="w-full px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white focus:border-white/12 transition-all outline-none resize-none"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium mb-2 text-white/70">
-                                  Tags
-                                </label>
-                                {/* Hierarchical Tags with Drag-and-Drop */}
-                                <div className="flex items-center gap-1 flex-wrap">
-                                  <Reorder.Group
-                                    axis="x"
-                                    values={getSortedTags()}
-                                    onReorder={handleTagReorder}
-                                    className="flex items-center gap-1 flex-wrap"
-                                  >
-                                    {getSortedTags().map((tag, index) => (
-                                      <Reorder.Item
-                                        key={getTagName(tag)}
-                                        value={tag}
-                                        className="flex items-center group relative cursor-grab active:cursor-grabbing"
-                                        whileDrag={{
-                                          scale: 1.05,
-                                          zIndex: 50,
-                                        }}
-                                      >
-                                        {/* Arrow before child tags (except first) */}
-                                        {index > 0 && (
-                                          <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
-                                        )}
-
-                                        {/* Badge */}
-                                        <div
-                                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-colors shadow-sm ${
-                                            editingTagIndex === index
-                                              ? "bg-white/10 border-[#A78BFA] ring-1 ring-[#A78BFA]/50"
-                                              : "bg-white/6 text-white/75 border-white/6 hover:bg-white/10"
-                                          }`}
-                                        >
-                                          <GripVertical className="w-3 h-3 text-white/30 shrink-0" />
-                                          {editingTagIndex === index ? (
-                                            <input
-                                              type="text"
-                                              value={editingTagName}
-                                              onChange={(e) =>
-                                                setEditingTagName(
-                                                  e.target.value,
-                                                )
-                                              }
-                                              onKeyDown={(e) => {
-                                                if (e.key === "Enter")
-                                                  finishEditingTag();
-                                                if (e.key === "Escape")
-                                                  setEditingTagIndex(null);
-                                              }}
-                                              onBlur={finishEditingTag}
-                                              autoFocus
-                                              className="bg-transparent border-none outline-none text-white w-24 text-sm"
-                                            />
-                                          ) : (
-                                            <span
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                startEditingTag(
-                                                  index,
-                                                  getTagName(tag),
-                                                );
-                                              }}
-                                              className="cursor-text hover:text-white truncate max-w-37.5"
-                                            >
-                                              {getTagName(tag)}
-                                            </span>
-                                          )}
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              removeTag(tag);
-                                            }}
-                                            className="p-0.5 ml-1 rounded-full hover:bg-white/15 transition-colors shrink-0"
-                                          >
-                                            <X className="w-3 h-3" />
-                                          </button>
-                                        </div>
-                                      </Reorder.Item>
-                                    ))}
-                                  </Reorder.Group>
-
-                                  {/* Add Button - OUTSIDE Reorder.Group */}
-                                  {getSortedTags().length > 0 && (
-                                    <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
-                                  )}
-                                  {addingContext === "metadata" ? (
-                                    <div className="flex items-center gap-1">
-                                      <input
-                                        type="text"
-                                        value={newChildTagName}
-                                        onChange={(e) =>
-                                          setNewChildTagName(e.target.value)
-                                        }
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") addChildTag();
-                                          if (e.key === "Escape")
-                                            setAddingContext("none");
-                                        }}
-                                        onBlur={() => {
-                                          if (!newChildTagName.trim()) {
-                                            setAddingContext("none");
-                                          }
-                                        }}
-                                        placeholder="New tag..."
-                                        autoFocus
-                                        className="px-3 py-1.5 rounded-full text-sm bg-white/6 text-white placeholder:text-white/45 border border-white/12 outline-none focus:border-[#A78BFA] w-28"
-                                      />
-                                      <button
-                                        onClick={addChildTag}
-                                        className="p-1.5 rounded-full bg-white/6 hover:bg-white/10 transition-colors cursor-pointer"
-                                      >
-                                        <Plus className="w-3.5 h-3.5 text-white/75" />
-                                      </button>
-                                    </div>
+                            {getSortedTags().map((tag, index) => (
+                              <Reorder.Item
+                                key={getTagName(tag)}
+                                value={tag}
+                                className="flex items-center group relative cursor-grab active:cursor-grabbing"
+                                whileDrag={{
+                                  scale: 1.05,
+                                  boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+                                  zIndex: 50,
+                                }}
+                              >
+                                {index > 0 && (
+                                  <ArrowRight className="w-3.5 h-3.5 text-white/30 mr-0.5 shrink-0" />
+                                )}
+                                <div
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                                    editingTagIndex === index
+                                      ? "bg-white/10 border-[#A78BFA] ring-1 ring-[#A78BFA]/50"
+                                      : "bg-white/6 text-white/75 border-white/6 hover:bg-white/10"
+                                  }`}
+                                >
+                                  <GripVertical className="w-3 h-3 text-white/30 shrink-0" />
+                                  {editingTagIndex === index ? (
+                                    <input
+                                      type="text"
+                                      value={editingTagName}
+                                      onChange={(e) =>
+                                        setEditingTagName(e.target.value)
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter")
+                                          finishEditingTag();
+                                        if (e.key === "Escape")
+                                          setEditingTagIndex(null);
+                                      }}
+                                      onBlur={finishEditingTag}
+                                      autoFocus
+                                      className="bg-transparent border-none outline-none text-white w-24 text-sm"
+                                    />
                                   ) : (
-                                    <button
+                                    <span
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setAddingContext("metadata");
+                                        startEditingTag(index, getTagName(tag));
                                       }}
-                                      className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/60 border border-dashed border-white/12 hover:border-white/25 hover:text-white/80 transition-all cursor-pointer"
+                                      className="cursor-text hover:text-white truncate max-w-37.5"
                                     >
-                                      <Plus className="w-3.5 h-3.5" />
-                                      <span>Add</span>
-                                    </button>
+                                      {getTagName(tag)}
+                                    </span>
                                   )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      removeTag(tag);
+                                    }}
+                                    className="p-0.5 ml-1 rounded-full hover:bg-white/15 transition-colors shrink-0"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
                                 </div>
-                              </div>
+                              </Reorder.Item>
+                            ))}
+                          </Reorder.Group>
 
-                              <div>
-                                <label className="block text-sm font-medium mb-2 text-white/70">
-                                  Personal Notes
-                                </label>
-                                <textarea
-                                  value={previewData.personalNotes}
-                                  onChange={(e) =>
-                                    setPreviewData({
-                                      ...previewData,
-                                      personalNotes: e.target.value,
-                                    })
+                          {getSortedTags().length > 0 && (
+                            <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
+                          )}
+                          {addingContext === "preview" ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                value={newChildTagName}
+                                onChange={(e) =>
+                                  setNewChildTagName(e.target.value)
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") addChildTag();
+                                  if (e.key === "Escape")
+                                    setAddingContext("none");
+                                }}
+                                onBlur={() => {
+                                  if (!newChildTagName.trim()) {
+                                    setAddingContext("none");
                                   }
-                                  placeholder="Optional..."
-                                  rows={3}
-                                  className="w-full px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white placeholder:text-white/45 focus:border-white/12 transition-all outline-none resize-none"
-                                />
-                              </div>
+                                }}
+                                placeholder="New tag..."
+                                autoFocus
+                                className="px-3 py-1.5 rounded-full text-sm bg-white/6 text-white placeholder:text-white/45 border border-white/12 outline-none focus:border-[#A78BFA] w-28"
+                              />
+                              <button
+                                onClick={addChildTag}
+                                className="p-1.5 rounded-full bg-white/6 hover:bg-white/10 transition-colors cursor-pointer"
+                              >
+                                <Plus className="w-3.5 h-3.5 text-white/75" />
+                              </button>
                             </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAddingContext("preview");
+                              }}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/60 border border-dashed border-white/12 hover:border-white/25 hover:text-white/80 transition-all cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Add</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Edit Details Section - Always expanded on desktop */}
+                      <div className="space-y-4">
+                        {/* Desktop: Always show edit fields */}
+                        <div className="hidden lg:block space-y-4">
+                          <h4 className="text-sm font-medium text-white/70 flex items-center gap-2">
+                            <FileText className="w-4 h-4" />
+                            Edit Details
+                          </h4>
+
+                          <div>
+                            <label className="block text-sm font-medium mb-2 text-white/70">
+                              Title
+                            </label>
+                            <input
+                              type="text"
+                              value={previewData.title}
+                              onChange={(e) =>
+                                setPreviewData({
+                                  ...previewData,
+                                  title: e.target.value,
+                                })
+                              }
+                              className="w-full px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white focus:border-white/12 transition-all outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium mb-2 text-white/70">
+                              Description
+                            </label>
+                            <textarea
+                              value={previewData.description}
+                              onChange={(e) =>
+                                setPreviewData({
+                                  ...previewData,
+                                  description: e.target.value,
+                                })
+                              }
+                              rows={3}
+                              className="w-full px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white focus:border-white/12 transition-all outline-none resize-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium mb-2 text-white/70">
+                              Tags
+                            </label>
+                            {/* Hierarchical Tags with Drag-and-Drop */}
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <Reorder.Group
+                                axis="x"
+                                values={getSortedTags()}
+                                onReorder={handleTagReorder}
+                                className="flex items-center gap-1 flex-wrap"
+                              >
+                                {getSortedTags().map((tag, index) => (
+                                  <Reorder.Item
+                                    key={getTagName(tag)}
+                                    value={tag}
+                                    className="flex items-center group relative cursor-grab active:cursor-grabbing"
+                                    whileDrag={{
+                                      scale: 1.05,
+                                      zIndex: 50,
+                                    }}
+                                  >
+                                    {/* Arrow before child tags (except first) */}
+                                    {index > 0 && (
+                                      <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
+                                    )}
+
+                                    {/* Badge */}
+                                    <div
+                                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-colors shadow-sm ${
+                                        editingTagIndex === index
+                                          ? "bg-white/10 border-[#A78BFA] ring-1 ring-[#A78BFA]/50"
+                                          : "bg-white/6 text-white/75 border-white/6 hover:bg-white/10"
+                                      }`}
+                                    >
+                                      <GripVertical className="w-3 h-3 text-white/30 shrink-0" />
+                                      {editingTagIndex === index ? (
+                                        <input
+                                          type="text"
+                                          value={editingTagName}
+                                          onChange={(e) =>
+                                            setEditingTagName(e.target.value)
+                                          }
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter")
+                                              finishEditingTag();
+                                            if (e.key === "Escape")
+                                              setEditingTagIndex(null);
+                                          }}
+                                          onBlur={finishEditingTag}
+                                          autoFocus
+                                          className="bg-transparent border-none outline-none text-white w-24 text-sm"
+                                        />
+                                      ) : (
+                                        <span
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            startEditingTag(
+                                              index,
+                                              getTagName(tag),
+                                            );
+                                          }}
+                                          className="cursor-text hover:text-white truncate max-w-37.5"
+                                        >
+                                          {getTagName(tag)}
+                                        </span>
+                                      )}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          removeTag(tag);
+                                        }}
+                                        className="p-0.5 ml-1 rounded-full hover:bg-white/15 transition-colors shrink-0"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </Reorder.Item>
+                                ))}
+                              </Reorder.Group>
+
+                              {/* Add Button - OUTSIDE Reorder.Group */}
+                              {getSortedTags().length > 0 && (
+                                <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
+                              )}
+                              {addingContext === "metadata" ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    value={newChildTagName}
+                                    onChange={(e) =>
+                                      setNewChildTagName(e.target.value)
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") addChildTag();
+                                      if (e.key === "Escape")
+                                        setAddingContext("none");
+                                    }}
+                                    onBlur={() => {
+                                      if (!newChildTagName.trim()) {
+                                        setAddingContext("none");
+                                      }
+                                    }}
+                                    placeholder="New tag..."
+                                    autoFocus
+                                    className="px-3 py-1.5 rounded-full text-sm bg-white/6 text-white placeholder:text-white/45 border border-white/12 outline-none focus:border-[#A78BFA] w-28"
+                                  />
+                                  <button
+                                    onClick={addChildTag}
+                                    className="p-1.5 rounded-full bg-white/6 hover:bg-white/10 transition-colors cursor-pointer"
+                                  >
+                                    <Plus className="w-3.5 h-3.5 text-white/75" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAddingContext("metadata");
+                                  }}
+                                  className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/60 border border-dashed border-white/12 hover:border-white/25 hover:text-white/80 transition-all cursor-pointer"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>Add</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium mb-2 text-white/70">
+                              Personal Notes
+                            </label>
+                            <textarea
+                              value={previewData.personalNotes}
+                              onChange={(e) =>
+                                setPreviewData({
+                                  ...previewData,
+                                  personalNotes: e.target.value,
+                                })
+                              }
+                              placeholder="Optional..."
+                              rows={3}
+                              className="w-full px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white placeholder:text-white/45 focus:border-white/12 transition-all outline-none resize-none"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Mobile/Tablet: Collapsible Metadata Section */}
+                        <div className="lg:hidden">
+                          <button
+                            onClick={() =>
+                              setMetadataExpanded(!metadataExpanded)
+                            }
+                            className="flex items-center justify-between w-full py-3 px-4 rounded-xl transition-all hover:bg-white/6 text-white/70 hover:text-white cursor-pointer"
+                          >
+                            <span className="text-sm font-medium">
+                              Edit details (optional)
+                            </span>
+                            <motion.div
+                              animate={{ rotate: metadataExpanded ? 180 : 0 }}
+                              transition={transitions.standard}
+                            >
+                              <ChevronDown className="w-4 h-4" />
+                            </motion.div>
+                          </button>
+
+                          <AnimatePresence>
+                            {metadataExpanded && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="overflow-hidden"
+                              >
+                                <div className="pt-4 space-y-4">
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2 text-white/70">
+                                      Title
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={previewData.title}
+                                      onChange={(e) =>
+                                        setPreviewData({
+                                          ...previewData,
+                                          title: e.target.value,
+                                        })
+                                      }
+                                      className="w-full px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white focus:border-white/12 transition-all outline-none"
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2 text-white/70">
+                                      Description
+                                    </label>
+                                    <textarea
+                                      value={previewData.description}
+                                      onChange={(e) =>
+                                        setPreviewData({
+                                          ...previewData,
+                                          description: e.target.value,
+                                        })
+                                      }
+                                      rows={3}
+                                      className="w-full px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white focus:border-white/12 transition-all outline-none resize-none"
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2 text-white/70">
+                                      Tags
+                                    </label>
+                                    {/* Hierarchical Tags with Drag-and-Drop */}
+                                    <div className="flex items-center gap-1 flex-wrap">
+                                      <Reorder.Group
+                                        axis="x"
+                                        values={getSortedTags()}
+                                        onReorder={handleTagReorder}
+                                        className="flex items-center gap-1 flex-wrap"
+                                      >
+                                        {getSortedTags().map((tag, index) => (
+                                          <Reorder.Item
+                                            key={getTagName(tag)}
+                                            value={tag}
+                                            className="flex items-center group relative cursor-grab active:cursor-grabbing"
+                                            whileDrag={{
+                                              scale: 1.05,
+                                              zIndex: 50,
+                                            }}
+                                          >
+                                            {/* Arrow before child tags (except first) */}
+                                            {index > 0 && (
+                                              <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
+                                            )}
+
+                                            {/* Badge */}
+                                            <div
+                                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-colors shadow-sm ${
+                                                editingTagIndex === index
+                                                  ? "bg-white/10 border-[#A78BFA] ring-1 ring-[#A78BFA]/50"
+                                                  : "bg-white/6 text-white/75 border-white/6 hover:bg-white/10"
+                                              }`}
+                                            >
+                                              <GripVertical className="w-3 h-3 text-white/30 shrink-0" />
+                                              {editingTagIndex === index ? (
+                                                <input
+                                                  type="text"
+                                                  value={editingTagName}
+                                                  onChange={(e) =>
+                                                    setEditingTagName(
+                                                      e.target.value,
+                                                    )
+                                                  }
+                                                  onKeyDown={(e) => {
+                                                    if (e.key === "Enter")
+                                                      finishEditingTag();
+                                                    if (e.key === "Escape")
+                                                      setEditingTagIndex(null);
+                                                  }}
+                                                  onBlur={finishEditingTag}
+                                                  autoFocus
+                                                  className="bg-transparent border-none outline-none text-white w-24 text-sm"
+                                                />
+                                              ) : (
+                                                <span
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    startEditingTag(
+                                                      index,
+                                                      getTagName(tag),
+                                                    );
+                                                  }}
+                                                  className="cursor-text hover:text-white truncate max-w-37.5"
+                                                >
+                                                  {getTagName(tag)}
+                                                </span>
+                                              )}
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  removeTag(tag);
+                                                }}
+                                                className="p-0.5 ml-1 rounded-full hover:bg-white/15 transition-colors shrink-0"
+                                              >
+                                                <X className="w-3 h-3" />
+                                              </button>
+                                            </div>
+                                          </Reorder.Item>
+                                        ))}
+                                      </Reorder.Group>
+
+                                      {/* Add Button - OUTSIDE Reorder.Group */}
+                                      {getSortedTags().length > 0 && (
+                                        <ArrowRight className="w-4 h-4 text-white/30 mx-1 shrink-0" />
+                                      )}
+                                      {addingContext === "metadata" ? (
+                                        <div className="flex items-center gap-1">
+                                          <input
+                                            type="text"
+                                            value={newChildTagName}
+                                            onChange={(e) =>
+                                              setNewChildTagName(e.target.value)
+                                            }
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter")
+                                                addChildTag();
+                                              if (e.key === "Escape")
+                                                setAddingContext("none");
+                                            }}
+                                            onBlur={() => {
+                                              if (!newChildTagName.trim()) {
+                                                setAddingContext("none");
+                                              }
+                                            }}
+                                            placeholder="New tag..."
+                                            autoFocus
+                                            className="px-3 py-1.5 rounded-full text-sm bg-white/6 text-white placeholder:text-white/45 border border-white/12 outline-none focus:border-[#A78BFA] w-28"
+                                          />
+                                          <button
+                                            onClick={addChildTag}
+                                            className="p-1.5 rounded-full bg-white/6 hover:bg-white/10 transition-colors cursor-pointer"
+                                          >
+                                            <Plus className="w-3.5 h-3.5 text-white/75" />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setAddingContext("metadata");
+                                          }}
+                                          className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-white/6 text-white/60 border border-dashed border-white/12 hover:border-white/25 hover:text-white/80 transition-all cursor-pointer"
+                                        >
+                                          <Plus className="w-3.5 h-3.5" />
+                                          <span>Add</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2 text-white/70">
+                                      Personal Notes
+                                    </label>
+                                    <textarea
+                                      value={previewData.personalNotes}
+                                      onChange={(e) =>
+                                        setPreviewData({
+                                          ...previewData,
+                                          personalNotes: e.target.value,
+                                        })
+                                      }
+                                      placeholder="Optional..."
+                                      rows={3}
+                                      className="w-full px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white placeholder:text-white/45 focus:border-white/12 transition-all outline-none resize-none"
+                                    />
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -1662,7 +2132,7 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                 <motion.button
                   whileHover={{ scale: 1.02, y: -1 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={handleSave}
+                  onClick={() => handleSave()}
                   disabled={
                     isLoading ||
                     viewState === "analyzing" ||
