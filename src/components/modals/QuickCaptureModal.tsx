@@ -18,6 +18,7 @@ import {
   ArrowRight,
   GripVertical,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { motion, AnimatePresence, Reorder } from "motion/react";
 import { useExtraction } from "@/hooks/useExtraction";
 import { useTags, Tag, invalidateTagsCache } from "@/hooks/useTags";
@@ -1730,21 +1731,121 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                             />
                           </div>
 
-                          <div>
-                            <label className="block text-sm font-medium mb-2 text-white/70">
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm font-medium text-white/70">
                               Description
                             </label>
-                            <textarea
-                              value={previewData.description}
-                              onChange={(e) =>
-                                setPreviewData({
-                                  ...previewData,
-                                  description: e.target.value,
-                                })
-                              }
-                              rows={3}
-                              className="w-full px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white focus:border-white/12 transition-all outline-none resize-none"
-                            />
+                            <div className="flex items-center gap-2 text-xs text-white/30">
+                              <Sparkles className="w-3 h-3" />
+                              <span>Markdown supported</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            {/* Editor */}
+                            <div className="relative group">
+                              <textarea
+                                value={previewData.description}
+                                onChange={(e) =>
+                                  setPreviewData({
+                                    ...previewData,
+                                    description: e.target.value,
+                                  })
+                                }
+                                rows={6}
+                                className="w-full px-4 py-3 rounded-xl border border-white/6 bg-[#0B0B0D] text-white/90 focus:border-white/12 transition-all outline-none resize-none font-mono text-sm leading-relaxed"
+                                placeholder="Add a description..."
+                              />
+                              <div className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/50 text-white/30 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                Markdown
+                              </div>
+                            </div>
+
+                            {/* Preview (Only if there is content) */}
+                            {previewData.description.trim() && (
+                              <div className="rounded-xl border border-white/6 bg-[#0B0B0D]/50 p-4">
+                                <div className="text-xs font-medium text-white/40 mb-3 uppercase tracking-wider">
+                                  Preview
+                                </div>
+                                <div className="prose prose-invert prose-sm max-w-none">
+                                  <ReactMarkdown
+                                    components={{
+                                      h1: ({ node, ...props }) => (
+                                        <h1
+                                          className="text-xl font-bold text-white mb-2 pb-1 border-b border-white/10"
+                                          {...props}
+                                        />
+                                      ),
+                                      h2: ({ node, ...props }) => (
+                                        <h2
+                                          className="text-lg font-bold text-white mb-2 mt-4"
+                                          {...props}
+                                        />
+                                      ),
+                                      h3: ({ node, ...props }) => (
+                                        <h3
+                                          className="text-base font-bold text-white mb-1 mt-3"
+                                          {...props}
+                                        />
+                                      ),
+                                      p: ({ node, ...props }) => (
+                                        <p
+                                          className="text-white/80 mb-3 leading-relaxed"
+                                          {...props}
+                                        />
+                                      ),
+                                      ul: ({ node, ...props }) => (
+                                        <ul
+                                          className="list-disc list-outside ml-4 mb-3 text-white/80"
+                                          {...props}
+                                        />
+                                      ),
+                                      ol: ({ node, ...props }) => (
+                                        <ol
+                                          className="list-decimal list-outside ml-4 mb-3 text-white/80"
+                                          {...props}
+                                        />
+                                      ),
+                                      li: ({ node, ...props }) => (
+                                        <li className="mb-1" {...props} />
+                                      ),
+                                      strong: ({ node, ...props }) => (
+                                        <strong
+                                          className="font-bold text-white"
+                                          {...props}
+                                        />
+                                      ),
+                                      em: ({ node, ...props }) => (
+                                        <em
+                                          className="text-white/90 italic"
+                                          {...props}
+                                        />
+                                      ),
+                                      blockquote: ({ node, ...props }) => (
+                                        <blockquote
+                                          className="border-l-2 border-white/20 pl-4 italic text-white/60 my-3"
+                                          {...props}
+                                        />
+                                      ),
+                                      code: ({ node, ...props }) => (
+                                        <code
+                                          className="bg-white/10 rounded px-1 py-0.5 font-mono text-xs"
+                                          {...props}
+                                        />
+                                      ),
+                                      a: ({ node, ...props }) => (
+                                        <a
+                                          className="text-[#A78BFA] hover:underline"
+                                          {...props}
+                                        />
+                                      ),
+                                    }}
+                                  >
+                                    {previewData.description}
+                                  </ReactMarkdown>
+                                </div>
+                              </div>
+                            )}
                           </div>
 
                           <div>
@@ -1941,20 +2042,131 @@ export function QuickCaptureModal({ isOpen, onClose }: QuickCaptureModalProps) {
                                   </div>
 
                                   <div>
-                                    <label className="block text-sm font-medium mb-2 text-white/70">
-                                      Description
-                                    </label>
-                                    <textarea
-                                      value={previewData.description}
-                                      onChange={(e) =>
-                                        setPreviewData({
-                                          ...previewData,
-                                          description: e.target.value,
-                                        })
-                                      }
-                                      rows={3}
-                                      className="w-full px-4 py-2.5 rounded-xl border border-white/6 bg-[#0B0B0D] text-white focus:border-white/12 transition-all outline-none resize-none"
-                                    />
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="text-sm font-medium text-white/70">
+                                        Description
+                                      </label>
+                                      <div className="flex items-center gap-2 text-xs text-white/30">
+                                        <Sparkles className="w-3 h-3" />
+                                        <span>Markdown supported</span>
+                                      </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                      {/* Editor */}
+                                      <div className="relative group">
+                                        <textarea
+                                          value={previewData.description}
+                                          onChange={(e) =>
+                                            setPreviewData({
+                                              ...previewData,
+                                              description: e.target.value,
+                                            })
+                                          }
+                                          rows={6}
+                                          className="w-full px-4 py-3 rounded-xl border border-white/6 bg-[#0B0B0D] text-white/90 focus:border-white/12 transition-all outline-none resize-none font-mono text-sm leading-relaxed"
+                                          placeholder="Add a description..."
+                                        />
+                                        <div className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/50 text-white/30 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                          Markdown
+                                        </div>
+                                      </div>
+
+                                      {/* Preview (Only if there is content) */}
+                                      {previewData.description.trim() && (
+                                        <div className="rounded-xl border border-white/6 bg-[#0B0B0D]/50 p-4">
+                                          <div className="text-xs font-medium text-white/40 mb-3 uppercase tracking-wider">
+                                            Preview
+                                          </div>
+                                          <div className="prose prose-invert prose-sm max-w-none">
+                                            <ReactMarkdown
+                                              components={{
+                                                h1: ({ node, ...props }) => (
+                                                  <h1
+                                                    className="text-xl font-bold text-white mb-2 pb-1 border-b border-white/10"
+                                                    {...props}
+                                                  />
+                                                ),
+                                                h2: ({ node, ...props }) => (
+                                                  <h2
+                                                    className="text-lg font-bold text-white mb-2 mt-4"
+                                                    {...props}
+                                                  />
+                                                ),
+                                                h3: ({ node, ...props }) => (
+                                                  <h3
+                                                    className="text-base font-bold text-white mb-1 mt-3"
+                                                    {...props}
+                                                  />
+                                                ),
+                                                p: ({ node, ...props }) => (
+                                                  <p
+                                                    className="text-white/80 mb-3 leading-relaxed"
+                                                    {...props}
+                                                  />
+                                                ),
+                                                ul: ({ node, ...props }) => (
+                                                  <ul
+                                                    className="list-disc list-outside ml-4 mb-3 text-white/80"
+                                                    {...props}
+                                                  />
+                                                ),
+                                                ol: ({ node, ...props }) => (
+                                                  <ol
+                                                    className="list-decimal list-outside ml-4 mb-3 text-white/80"
+                                                    {...props}
+                                                  />
+                                                ),
+                                                li: ({ node, ...props }) => (
+                                                  <li
+                                                    className="mb-1"
+                                                    {...props}
+                                                  />
+                                                ),
+                                                strong: ({
+                                                  node,
+                                                  ...props
+                                                }) => (
+                                                  <strong
+                                                    className="font-bold text-white"
+                                                    {...props}
+                                                  />
+                                                ),
+                                                em: ({ node, ...props }) => (
+                                                  <em
+                                                    className="text-white/90 italic"
+                                                    {...props}
+                                                  />
+                                                ),
+                                                blockquote: ({
+                                                  node,
+                                                  ...props
+                                                }) => (
+                                                  <blockquote
+                                                    className="border-l-2 border-white/20 pl-4 italic text-white/60 my-3"
+                                                    {...props}
+                                                  />
+                                                ),
+                                                code: ({ node, ...props }) => (
+                                                  <code
+                                                    className="bg-white/10 rounded px-1 py-0.5 font-mono text-xs"
+                                                    {...props}
+                                                  />
+                                                ),
+                                                a: ({ node, ...props }) => (
+                                                  <a
+                                                    className="text-[#A78BFA] hover:underline"
+                                                    {...props}
+                                                  />
+                                                ),
+                                              }}
+                                            >
+                                              {previewData.description}
+                                            </ReactMarkdown>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
 
                                   <div>

@@ -1,6 +1,5 @@
 fastapi[standard]
 uvloop; platform_system != "Windows"
-beautifulsoup4
 PyMuPDF
 pytesseract
 Pillow
@@ -26,3 +25,4 @@ ffmpeg-python
 supabase
 google-genai
 duckduckgo-search
+firecrawl-py

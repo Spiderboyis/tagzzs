@@ -144,18 +144,23 @@ class SummarizationEngine:
             self.logger.info(
                 f"Text too short ({word_count} words) for summarization (min: {min_length}). Cleaning up instead."
             )
-            prompt = f"""Please clean up, clarify, and format the following text taken from an image OCR result. 
-Make it readable and correct any obvious OCR errors.
+            prompt = f"""Please clean up, clarify, and format the following text taken from an image OCR result or short document.
+Make it readable and correct any obvious errors.
+Use **Markdown** formatting (paragraphs, **bold** for key terms, *italics* for emphasis).
 Keep it concise and preserve all information.
 
-Original OCR Text:
+Original Text:
 {text_to_summarize}
 
 Cleaned Text:"""
         else:
-            prompt = f"""Please provide a concise summary of the following text. 
+            prompt = f"""Please provide a concise summary of the following text.
 The summary should be between {min_length} and {max_length} words.
 Keep the summary factual and preserve the key information.
+Format the output using **Markdown**:
+- Use paragraphs for readability.
+- Use **bold** for important entities or numbers.
+- Use *italics* for emphasis where appropriate.
 
 Text to summarize:
 {text_to_summarize}
@@ -200,7 +205,7 @@ Summary:"""
                     f"  📄 Summarizing chunk {i}/{len(chunks)} ({len(chunk)} chars)..."
                 )
 
-                chunk_prompt = f"""Please provide a summary of this text section. 
+                chunk_prompt = f"""Please provide a summary of this text section.
 Keep it concise and preserve key information.
 
 Text:
@@ -230,9 +235,13 @@ Summary:"""
             combined_summaries = combined_summaries[:max_summary_chars] + "..."
 
         self.logger.info("Generating final summary from combined chunk summaries...")
-        final_prompt = f"""Please provide a final concise summary based on these summaries. 
+        final_prompt = f"""Please provide a final concise summary based on these summaries.
 The summary should be between {min_length} and {max_length} words.
 Combine information from all sections and preserve key points.
+Format the output using **Markdown**:
+- Use paragraphs for readability.
+- Use **bold** for important entities or numbers.
+- Use *italics* for emphasis where appropriate.
 
 Summaries to consolidate:
 {combined_summaries}

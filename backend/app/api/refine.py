@@ -6,13 +6,11 @@ API endpoints for content refinement pipelines (extract-refine combos)
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, HttpUrl
 from datetime import datetime
-from fastapi import Request, Depends
+from fastapi import Depends
 import time
 import uuid
-import os
 from typing import Dict, Any
 from urllib.parse import urlparse
-from fastapi.responses import JSONResponse
 from app.api.dependencies import get_current_user
 from app.utils.supabase.auth import create_auth_error
 from app.services.credit_service import CreditService, CreditError
@@ -198,7 +196,6 @@ async def extract_and_refine_auto(
         url = str(request["url"])
         url_lower = url.lower()
 
-        # Detect content type
         youtube_domains = [
             "youtube.com",
             "youtu.be",
@@ -206,12 +203,22 @@ async def extract_and_refine_auto(
             "www.youtube.com",
         ]
         is_youtube = any(domain in url_lower for domain in youtube_domains)
+        
+        is_google_docs = "docs.google.com/document" in url_lower
+        is_google_slides = "docs.google.com/presentation" in url_lower
+        is_google_sheets = "docs.google.com/spreadsheets" in url_lower
 
-        feature='capture'
+        feature = "capture"
 
         if is_youtube:
             content_type = "youtube"
             feature = "youtube_extract"
+        elif is_google_docs:
+            content_type = "google_docs"
+        elif is_google_slides:
+            content_type = "google_slides"
+        elif is_google_sheets:
+            content_type = "google_sheets"
         elif url_lower.endswith(".pdf"):
             content_type = "pdf"
         elif any(
@@ -222,22 +229,23 @@ async def extract_and_refine_auto(
         else:
             content_type = "website"
 
-        credit_ledger_metadata = {"url": url,
-                                  "reason": "Capture Content",
-                                  "description": "Capturing content worth 5 credits per use"} # Can update later
+        credit_ledger_metadata = {
+            "url": url,
+            "reason": "Capture Content",
+            "description": "Capturing content worth 5 credits per use",
+        }  
         request_id = str(uuid.uuid4())
         await CreditService.deduct(
             user_id=current_user["id"],
             feature=feature,
             request_id=request_id,
-            metadata=credit_ledger_metadata
+            metadata=credit_ledger_metadata,
         )
 
-        # Route to appropriate extractor
         if content_type == "youtube":
             from app.utils.supabase.supabase_client import (
                 supabase,
-            )  # globally initialized supabase client
+            )  
 
             response = (
                 supabase.table("extraction_queue")
@@ -346,14 +354,12 @@ async def extract_and_refine_auto(
                     raw_content=content,
                 )
             else:
-                # Vision-only path or OCR failed
                 from app.services.refiners.tag_generators import generate_tags
 
                 vision_summary = (
                     content or "Image analysis completed (description-only)."
                 )
 
-                # Generate tags for the vision description
                 tag_response = await generate_tags(text=vision_summary, top_k=5)
                 vision_tags = (
                     [tag.name for tag in tag_response.tags]
@@ -373,6 +379,117 @@ async def extract_and_refine_auto(
                     raw_content="",
                 )
 
+        elif content_type == "google_docs":
+            from app.services.extractors.google import extract_google_docs_content
+            from app.pipelines.refinement_pipeline import (
+                process_extracted_content,
+                RefinementConfig,
+            )
+            from app.utils.response_formatter import format_extract_refine_response
+
+            extraction_result = await extract_google_docs_content(url)
+
+            if not extraction_result.success:
+                raise ValueError(f"Failed to extract Google Doc: {extraction_result.error}")
+
+            if not extraction_result.content.strip():
+                raise ValueError("No text content extracted from Google Doc")
+
+            refinement_response = await process_extracted_content(
+                extracted_text=extraction_result.content,
+                source_url=url,
+                source_type="google_docs",
+                title=extraction_result.title,
+                config=RefinementConfig(),
+            )
+
+            refined_dict = refinement_response.to_dict()
+            return format_extract_refine_response(
+                title=extraction_result.title or "Google Doc",
+                summary=refined_dict.get("summary") or "",
+                tags=refined_dict.get("tags") or [],
+                tags_confidence=refined_dict.get("tags_confidence"),
+                url=url,
+                content_type="google_docs",
+                original_text_length=len(extraction_result.content),
+                word_count=extraction_result.word_count,
+                raw_content=extraction_result.content,
+            )
+
+        elif content_type == "google_slides":
+            from app.services.extractors.google import extract_google_slides_content
+            from app.pipelines.refinement_pipeline import (
+                process_extracted_content,
+                RefinementConfig,
+            )
+            from app.utils.response_formatter import format_extract_refine_response
+
+            extraction_result = await extract_google_slides_content(url)
+
+            if not extraction_result.success:
+                raise ValueError(f"Failed to extract Google Slides: {extraction_result.error}")
+
+            if not extraction_result.content.strip():
+                raise ValueError("No text content extracted from Google Slides")
+
+            refinement_response = await process_extracted_content(
+                extracted_text=extraction_result.content,
+                source_url=url,
+                source_type="google_slides",
+                title=extraction_result.title,
+                config=RefinementConfig(),
+            )
+
+            refined_dict = refinement_response.to_dict()
+            return format_extract_refine_response(
+                title=extraction_result.title or "Google Slides",
+                summary=refined_dict.get("summary") or "",
+                tags=refined_dict.get("tags") or [],
+                tags_confidence=refined_dict.get("tags_confidence"),
+                url=url,
+                content_type="google_slides",
+                original_text_length=len(extraction_result.content),
+                word_count=extraction_result.word_count,
+                raw_content=extraction_result.content,
+            )
+
+        elif content_type == "google_sheets":
+            from app.services.extractors.google import extract_google_sheets_content
+            from app.pipelines.refinement_pipeline import (
+                process_extracted_content,
+                RefinementConfig,
+            )
+            from app.utils.response_formatter import format_extract_refine_response
+
+            extraction_result = await extract_google_sheets_content(url)
+
+            if not extraction_result.success:
+                raise ValueError(f"Failed to extract Google Sheets: {extraction_result.error}")
+
+            if not extraction_result.content.strip():
+                raise ValueError("No text content extracted from Google Sheets")
+
+            refinement_response = await process_extracted_content(
+                extracted_text=extraction_result.content,
+                source_url=url,
+                source_type="google_sheets",
+                title=extraction_result.title,
+                config=RefinementConfig(),
+            )
+
+            refined_dict = refinement_response.to_dict()
+            return format_extract_refine_response(
+                title=extraction_result.title or "Google Sheets",
+                summary=refined_dict.get("summary") or "",
+                tags=refined_dict.get("tags") or [],
+                tags_confidence=refined_dict.get("tags_confidence"),
+                url=url,
+                content_type="google_sheets",
+                original_text_length=len(extraction_result.content),
+                word_count=extraction_result.word_count,
+                raw_content=extraction_result.content,
+            )
+
         else:  # website
             from app.services.extractors.web import extract_content
             from app.pipelines.refinement_pipeline import (
@@ -384,7 +501,12 @@ async def extract_and_refine_auto(
             extraction_response = await extract_content(str(request["url"]))
 
             if not extraction_response.success or not extraction_response.cleaned_data:
-                raise ValueError("Failed to extract content from website")
+                error_msg = (
+                    extraction_response.get_error_summary()
+                    if extraction_response.has_errors()
+                    else "Unknown error"
+                )
+                raise ValueError(f"Failed to extract content from website: {error_msg}")
 
             body_text = extraction_response.cleaned_data.main_content or ""
             if not body_text:
@@ -405,7 +527,15 @@ async def extract_and_refine_auto(
             )
 
             refined_dict = refinement_response.to_dict()
-            return format_extract_refine_response(
+
+            # Determine thumbnail URL (prioritize og_image from extraction)
+            thumbnail_url = (
+                extraction_response.meta_data.og_image
+                if extraction_response.meta_data
+                else None
+            )
+
+            final_response = format_extract_refine_response(
                 title=extraction_response.meta_data.title or ""
                 if extraction_response.meta_data
                 else "Untitled",
@@ -417,14 +547,16 @@ async def extract_and_refine_auto(
                 original_text_length=len(body_text),
                 word_count=extraction_response.cleaned_data.word_count,
                 raw_content=body_text,
+                thumbnail_url=thumbnail_url,
             )
 
+            return final_response
+
     except CreditError:
-        raise HTTPException(
-            status_code=402, detail="Insufficient Credits"
-        )
+        raise HTTPException(status_code=402, detail="Insufficient Credits")
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(
             status_code=500, detail=f"Auto extract-refine pipeline failed: {str(e)}"
